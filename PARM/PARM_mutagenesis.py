@@ -55,42 +55,63 @@ def PARM_mutagenesis(
     # Loading motif database
     PARM_misc.log("Loading motif database", parm_version)
     motif_db_PFM, _, motif_db_ICT = load_motif_db(motif_file=motif_database)
-    # Parsing the fasta file
+    # ====================================================================================
+    # Parsing the fasta file =============================================================
+    # ====================================================================================
+    PARM_misc.log("Reading input file", parm_version)
+    inputs = {"sequence": [], "ID": [], "output_directory": []}
     total_interactions = len(list(SeqIO.parse(input, "fasta"))) * len(model_weights)
     for record in SeqIO.parse(input, "fasta"):
         sequence_ID = record.id
         sequence = str(record.seq).upper()
-        PARM_misc.log(f"Running in-silico mutagenesis", parm_version)
-        pbar = tqdm(total=total_interactions, ncols=80)
-        output_pdf = os.path.join(output_directory, sequence_ID, "mutagenesis.pdf")
-        output_pdf = PdfPages(output_pdf)
-        for model_name, complete_model in complete_models.items():
-            parm_score, mutagenesis_df, motif_scanning_results, sequence_onehot = (
-                create_dataframe_mutation_effect(
-                    sequence=sequence,
-                    sequence_ID=sequence_ID,
-                    complete_model=complete_model,
-                    output_directory=output_directory,
-                    PFM_hocomoco_dict=motif_db_PFM,
-                )
+        # If sequence is longer than 600 nt, it's not inputted to PARM
+        if len(sequence) > 600:
+            PARM_misc.log(
+                f"WARNING: sequence {sequence_ID} is longer than 600 bp. Skipping...",
+                parm_version,
             )
-            # save the parm score of this sequence to the predictions dict
-            # -- this will be used later to have the predictions in the title of
-            #    the plot
-            parm_scores[model_name][sequence_ID] = parm_score
-            # Now plot the data
-            fig, ax = plot_mutagenesis_results(
-                sequence=sequence,
-                mutagenesis_df=mutagenesis_df,
-                motif_scanning_results=motif_scanning_results,
-                sequence_onehot=sequence_onehot,
-                sequence_score=parm_score,
-                model_name=model_name,
-                motif_db_ICT=motif_db_ICT,
+        else:
+            inputs["sequence"].append(sequence)
+            inputs["ID"].append(sequence_ID)
+            inputs["output_directory"].append(
+                os.path.join(output_directory, f"{sequence_ID}")
             )
-            output_pdf.savefig(fig)
-            pbar.update(1)
-        output_pdf.close()
+    # ====================================================================================
+    # Running mutagenesis ================================================================
+    # ====================================================================================
+    pbar = tqdm(total=total_interactions, ncols=80)
+    # First, create output directory
+    os.makedirs(os.path.join(output_directory, sequence_ID), exist_ok=True)
+    #output_pdf = os.path.join(output_directory, sequence_ID, "mutagenesis.pdf")
+    #output_pdf = PdfPages(output_pdf)
+    for model_name, complete_model in complete_models.items():
+        PARM_misc.log(f"\nRunning in-silico mutagenesis for {model_name}", parm_version)
+        parm_score, mutagenesis_df, motif_scanning_results, sequence_onehot = (
+            create_dataframe_mutation_effect(
+                inputs=inputs,
+                complete_model=complete_model,
+                output_directory=output_directory,
+                PFM_hocomoco_dict=motif_db_PFM,
+                pbar=pbar,
+            )
+        )
+        #     # save the parm score of this sequence to the predictions dict
+        #     # -- this will be used later to have the predictions in the title of
+        #     #    the plot
+        #     parm_scores[model_name][sequence_ID] = parm_score
+        #     # Now plot the data
+        #     fig, _ = plot_mutagenesis_results(
+        #         sequence=sequence,
+        #         mutagenesis_df=mutagenesis_df,
+        #         motif_scanning_results=motif_scanning_results,
+        #         sequence_onehot=sequence_onehot,
+        #         sequence_score=parm_score,
+        #         model_name=model_name,
+        #         motif_db_ICT=motif_db_ICT,
+        #     )
+        #     output_pdf.savefig(fig)
+        #     pbar.update(1)
+        # output_pdf.close()
 
 
 def load_motif_db(
@@ -159,12 +180,11 @@ def load_motif_db(
 
 
 def create_dataframe_mutation_effect(
-    sequence: str,
-    sequence_ID: str,
+    inputs,
     complete_model: torch.nn.Module,
     output_directory: str,
     PFM_hocomoco_dict: dict,
-    L_max=600,
+    pbar,
 ):
     """
     Return a dataframe with the effect of each mutation.
@@ -180,94 +200,81 @@ def create_dataframe_mutation_effect(
             type_motif_scanning: (str) Either 'PCC' or 'conv_scanning'
     """
 
-    # Defining varialbes
-    folder_output = os.path.join(output_directory, f"{sequence_ID}")
-    if not os.path.exists(folder_output):
-        os.makedirs(
-            folder_output
-        )  # Create subdirectory with the sequence_ID in the output folder
+    # First, create all output directories
+    for dir in inputs["output_directory"]:
+        os.makedirs(dir, exist_ok=True)
 
-    file_hits = os.path.join(folder_output, f"scanned_motifs.txt.gz")
-    # Mutagenesis file
-    file_mutagenesis = os.path.join(folder_output, f"mutagenesis.txt.gz")
-
-    promoter_importance_base = pd.DataFrame()
-
-    if not os.path.exists(file_mutagenesis):
-        att_all, parm_score, reference_onehot = compute_saturation_mutagenesis(
-            seq=sequence,
-            L_max=L_max,
-            start_motif=0,
-            end_motif=len(sequence),
+    (attribution_all_seqs, parm_score, reference_onehot) = (
+        compute_saturation_mutagenesis(
+            seq=inputs["sequence"],
             completemodel=complete_model,
+            pbar=pbar,
         )
-
-        promoter_importance_base_single = pd.DataFrame(
+    )
+    
+    # Saving results -- iterate over the attribution_all_seqs matrix
+    for index_sequence, attribution in enumerate(attribution_all_seqs):
+        this_sequence = inputs["sequence"][index_sequence]
+        this_output = inputs["output_directory"][index_sequence]
+        this_output_mutagenesis = os.path.join(this_output, "mutagenesis.txt.gz")
+        
+        #attribution = attribution.reshape(4,len(this_sequence))
+        print('')
+        print(this_output_mutagenesis, flush=True)
+        
+        
+        attribution_df = pd.DataFrame(
             {
-                "Ref": list(sequence),
-                "A": att_all[0, :],
-                "C": att_all[1, :],
-                "G": att_all[2, :],
-                "T": att_all[3, :],
+                "Ref": list(this_sequence),
+                "A": attribution[0, :],
+                "C": attribution[1, :],
+                "G": attribution[2, :],
+                "T": attribution[3, :],
             }
         )
-
-        promoter_importance_base = pd.concat(
-            [promoter_importance_base, promoter_importance_base_single]
-        )
-
-        promoter_importance_base.to_csv(
-            file_mutagenesis,
+        # Saving as csv
+        attribution_df.to_csv(
+            this_output_mutagenesis ,
             index=False,
             sep="\t",
             compression={"method": "gzip", "compresslevel": 5},
         )
+    
+    # # now compute the average importance for each nucleotide in the reference sequnece
 
-    else:
-        promoter_importance_base = pd.read_csv(
-                file_mutagenesis, sep="\t", compression="gzip"
-            )
-        reference_onehot = ''.join(promoter_importance_base.Ref)
-        parm_score = get_prediction(sequence=reference_onehot, complete_model=complete_model)
-        reference_onehot = sequence_to_onehot(sequences=reference_onehot, L_max=len(reference_onehot))
+    # onehot_seq = reference_onehot[0]
+    # plot_promoter = promoter_importance_base[["A", "C", "G", "T"]]
+    # vector_importance = plot_promoter.mean(axis=1)
+    # mutagenesis_attribution = np.transpose(
+    #     onehot_seq * np.expand_dims(vector_importance, 1)
+    # )
 
-    # now compute the average importance for each nucleotide in the reference sequnece
+    # hits = run_PARM_motif_scanning(  # old slide_through_attribution_and_PFM
+    #     mutagenesis_attribution=mutagenesis_attribution,
+    #     known_PFM=PFM_hocomoco_dict,
+    #     threshold=0.6,
+    #     cutoff_att=0.001,
+    #     append=True,
+    #     split_pos_neg=False,
+    # )
 
-    onehot_seq = reference_onehot[0]
-    plot_promoter = promoter_importance_base[["A", "C", "G", "T"]]
-    vector_importance = plot_promoter.mean(axis=1)
-    mutagenesis_attribution = np.transpose(
-        onehot_seq * np.expand_dims(vector_importance, 1)
-    )
-
-    hits = run_PARM_motif_scanning(  # old slide_through_attribution_and_PFM
-        mutagenesis_attribution=mutagenesis_attribution,
-        known_PFM=PFM_hocomoco_dict,
-        threshold=0.6,
-        cutoff_att=0.001,
-        append=True,
-        split_pos_neg=False,
-    )
-
-    hits.to_csv(
-        file_hits,
-        index=False,
-        sep="\t",
-        compression={"method": "gzip", "compresslevel": 5},
-    )
-    return parm_score, promoter_importance_base, hits, reference_onehot
+    # hits.to_csv(
+    #     file_hits,
+    #     index=False,
+    #     sep="\t",
+    #     compression={"method": "gzip", "compresslevel": 5},
+    # )
+    # return parm_score, promoter_importance_base, hits, reference_onehot
 
 
 def compute_saturation_mutagenesis(
     seq,
-    L_max,
-    start_motif,
-    end_motif,
     completemodel,
     ref_to_alt_attribution=True,
     index_output=0,
     alt_nt=["A", "C", "G", "T"],
     window_del=False,
+    pbar='',
 ):
     """
     Computes saturation mutagenesis of a given region of a sequence (or the complete one) to determine
@@ -301,26 +308,21 @@ def compute_saturation_mutagenesis(
     # If seq is a list, we have multiple sequences or index ouputs
     if type(seq) != list:
         seq = [seq]
-    if type(start_motif) != list:
-        start_motif = [start_motif]
-    if type(end_motif) != list:
-        end_motif = [end_motif]
     if type(index_output) != list:
         index_output = [index_output]
 
-    # If the start_motif is a list, it should have the same length as seq
-    if len(seq) != len(start_motif) or len(seq) != len(end_motif):
-        raise Exception("Length of start_motif should be the same as the length of seq")
-    # Check if all motifs have the same length
-    if len(set([end_motif[i] - start_motif[i] for i in range(len(seq))])) > 1:
-        raise Exception("All motifs should have the same length")
+    # Defining start and end motifs/sequences
+    start_motif = [0 for _ in seq]
+    end_motif = [len(i) for i in seq]
+    L_max = end_motif
     size_motifs = end_motif[0] - start_motif[0]
 
     if torch.cuda.is_available():
         completemodel = completemodel.cuda()
 
     # Compute SuRE score of reference sequence
-    reference_onehot = sequence_to_onehot(seq, L_max)
+    # PARM_misc.log(f"LMax in line 328: {L_max}\n\n\n\n", '2')
+    reference_onehot = sequence_to_onehot(seq, L_max, for_mutagenesis=True)
     reference = torch.tensor(np.float32(reference_onehot)).permute(0, 2, 1)
     if torch.cuda.is_available():
         reference = reference.cuda()
@@ -360,6 +362,7 @@ def compute_saturation_mutagenesis(
                     seq_mutated[pos] = ALT
                     ALT_seq = "".join(seq_mutated)
                     seqs_position_mutation.append(ALT_seq)
+#            pbar.update(1)
 
             # The sequences are going to be saved for each position the four nucleotides,
             # so if we compute all the possible sequences, and the model returns the predictions
@@ -367,7 +370,7 @@ def compute_saturation_mutagenesis(
 
     with torch.no_grad():
         alt_reference = torch.tensor(
-            np.float32(sequence_to_onehot(seqs_position_mutation, L_max))
+            np.float32(sequence_to_onehot(seqs_position_mutation, L_max, for_mutagenesis=True))
         ).permute(0, 2, 1)
         if torch.cuda.is_available():
             alt_reference = alt_reference.cuda()
@@ -726,7 +729,10 @@ def plot_scanned_motifs(attribution, ax, motif_scanning_results, motifs_ICT, fig
     # relevant_hits_row2[:,:] = 0
 
     # Take only hits that their mean attribution is at least 10% of the letter wiht max attribution
-    hits = motif_scanning_results[motif_scanning_results.att_x_PFM.abs() > (motif_scanning_results.att_x_PFM.abs().max() * percentage)]
+    hits = motif_scanning_results[
+        motif_scanning_results.att_x_PFM.abs()
+        > (motif_scanning_results.att_x_PFM.abs().max() * percentage)
+    ]
     # Avoid overlapping hits
     hits["rho_abs"] = np.abs(hits.rho)
     hits = hits.sort_values("start")

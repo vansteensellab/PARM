@@ -64,7 +64,7 @@ def get_prediction(sequence, complete_model):
     return score
 
 
-def sequence_to_onehot(sequences, L_max=600):
+def sequence_to_onehot(sequences, L_max, for_mutagenesis=False):
     """
     Transform list of sequences to one hot. Padding is done in the middle, and the padding value is 0.
     Args:
@@ -84,14 +84,24 @@ def sequence_to_onehot(sequences, L_max=600):
     }
 
     # get On Hot Encoding
-    one_hot = []
-    for seq in sequences:
-
-        x = np.array([letter_to_vector[s] for s in seq])
-        pw = (L_max - x.shape[0]) / 2
-        PW = [int(np.ceil(pw)), int(np.floor(pw))]
-        one_hot.append(np.pad(x, [PW, [0, 0]], constant_values=0))
-
-    one_hot = np.array(one_hot)
+    if for_mutagenesis is False:
+        one_hot = []
+        for seq in sequences:
+            x = np.array([letter_to_vector[s] for s in seq])
+            pw = (L_max - x.shape[0]) / 2
+            PW = [int(np.ceil(pw)), int(np.floor(pw))]
+            one_hot.append(np.pad(x, [PW, [0, 0]], constant_values=0))
+        one_hot = np.array(one_hot)
+    else:
+        # for mutagenesis, the L_max is not set to 600, but is the sequence length, instead
+        one_hot = []
+        for seq in sequences:
+            this_seq_length = len(seq)
+            x = np.array([letter_to_vector[s] for s in seq])
+            pw = (this_seq_length - x.shape[0]) / 2
+            PW = [int(np.ceil(pw)), int(np.floor(pw))]
+            one_hot.append(np.pad(x, [PW, [0, 0]], constant_values=0))
+        one_hot = np.array(one_hot)
+        
 
     return one_hot

@@ -31,5 +31,5 @@ setup(name='PARM',
       author='PARM developers',
       license='GPLv3',
       packages=['PARM'],
-      entry_points={"console_scripts": ['PARM = PARM.PARM:main']},
+      entry_points={"console_scripts": ['PARM = PARM:main']},
       python_requires='>=3.9')

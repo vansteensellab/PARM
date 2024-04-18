@@ -16,7 +16,7 @@
 To install **PARM**, first clone this repository in your machine. Make sure you have conda installed:
 
 ```sh
-git clone 
+git clone git@github.com:vansteensellab/PARM.git
 ```
 
 Then, create the environment specified in `misc/PARM_env.yml` with all **PARM**'s requirements:

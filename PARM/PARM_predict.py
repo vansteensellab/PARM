@@ -54,7 +54,7 @@ def get_prediction(sequence, complete_model):
     """
     if torch.cuda.is_available():
         complete_model = complete_model.cuda()
-    onehot_fragment = torch.tensor(np.float32(sequence_to_onehot([sequence]))).permute(
+    onehot_fragment = torch.tensor(np.float32(sequence_to_onehot([sequence], L_max = len(sequence)))).permute(
         0, 2, 1
     )
     if torch.cuda.is_available():

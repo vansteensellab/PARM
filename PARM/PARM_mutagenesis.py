@@ -20,13 +20,11 @@ import os
 import io
 import urllib
 from PARM_utils_load_model import load_PARM
-from PARM_predict import sequence_to_onehot, get_prediction
 import PARM_misc
 from tqdm import tqdm
 from matplotlib import pyplot as plt, colors
 import logomaker
 import seaborn as sns
-from matplotlib.backends.backend_pdf import PdfPages
 
 
 def PARM_mutagenesis(
@@ -41,9 +39,12 @@ def PARM_mutagenesis(
     For each sequence in the fasta, it writes three outputs: the mutagenesis matrix,
     the motif hits, and the pdf plot of the assay.
     """
-    # Initiate PARMscores dict: {K562: {seq1: score_seq1, seq2: score_seq2},
-    #                            HepG2:{seq1: score_seq1, seq2: score_seq2}}
     parm_scores = dict()
+    # Loading motif database
+    PARM_misc.log("Loading motif database", parm_version)
+    PFM_hocomoco_dict, _, ICT_hocomoco_dict = dict_jaspar(
+        file=motif_database, reverse=True
+    )
     # Loading models
     complete_models = dict()
     for model in model_weights:
@@ -52,49 +53,34 @@ def PARM_mutagenesis(
         complete_models[model_name] = load_PARM(model)
         parm_scores[model_name] = dict()
 
-    # Loading motif database
-    PARM_misc.log("Loading motif database", parm_version)
-    motif_db_PFM, _, motif_db_ICT = load_motif_db(motif_file=motif_database)
+    
     # ====================================================================================
     # Parsing the fasta file =============================================================
     # ====================================================================================
-    PARM_misc.log("Reading input file", parm_version)
-    inputs = {"sequence": [], "ID": [], "output_directory": []}
+    PARM_misc.log("Computing saturation mutagenesis", parm_version)
     total_interactions = len(list(SeqIO.parse(input, "fasta"))) * len(model_weights)
+    pbar = tqdm(total=total_interactions, ncols=80)
     for record in SeqIO.parse(input, "fasta"):
         sequence_ID = record.id
         sequence = str(record.seq).upper()
-        # If sequence is longer than 600 nt, it's not inputted to PARM
-        if len(sequence) > 600:
-            PARM_misc.log(
-                f"WARNING: sequence {sequence_ID} is longer than 600 bp. Skipping...",
-                parm_version,
-            )
-        else:
-            inputs["sequence"].append(sequence)
-            inputs["ID"].append(sequence_ID)
-            inputs["output_directory"].append(
-                os.path.join(output_directory, f"{sequence_ID}")
-            )
-    # ====================================================================================
-    # Running mutagenesis ================================================================
-    # ====================================================================================
-    pbar = tqdm(total=total_interactions, ncols=80)
-    # First, create output directory
-    os.makedirs(os.path.join(output_directory, sequence_ID), exist_ok=True)
-    #output_pdf = os.path.join(output_directory, sequence_ID, "mutagenesis.pdf")
-    #output_pdf = PdfPages(output_pdf)
-    for model_name, complete_model in complete_models.items():
-        PARM_misc.log(f"\nRunning in-silico mutagenesis for {model_name}", parm_version)
-        parm_score, mutagenesis_df, motif_scanning_results, sequence_onehot = (
-            create_dataframe_mutation_effect(
-                inputs=inputs,
-                complete_model=complete_model,
-                output_directory=output_directory,
-                PFM_hocomoco_dict=motif_db_PFM,
-                pbar=pbar,
-            )
-        )
+        for model_name, model in complete_models.items():
+            mutagenesis_data = os.path.join(output_directory, sequence_ID, 'mutagenesis_'+sequence_ID+'.txt.gz')
+            if os.path.exists(mutagenesis_data):
+                PARM_misc.log(f"WARNING: mutagenesis data for {sequence_ID} already exist. Skipping...",
+                              parm_version)
+            else:
+                create_dataframe_mutation_effect(
+                    name=sequence_ID,
+                    strand="+",
+                    model=model,
+                    output_directory=output_directory,
+                    PFM_hocomoco_dict=PFM_hocomoco_dict,
+                    L_max=600,
+                    reverse=False,
+                    seq=sequence,
+                    type_motif_scanning="PCC",
+                )
+            pbar.update(1)
         #     # save the parm score of this sequence to the predictions dict
         #     # -- this will be used later to have the predictions in the title of
         #     #    the plot
@@ -114,13 +100,15 @@ def PARM_mutagenesis(
         # output_pdf.close()
 
 
-def load_motif_db(
-    motif_file="https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
+def dict_jaspar(
+    file="https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
+    reverse=False,
 ):
     """
     Load all hocomoco motifs in a dictionary format from jaspar file.
-    Default is use the human hocomoco v11: "https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt"
-    Also, gets the reverse of each the motifs.
+    Args:
+        file: (str) Path to jaspar file containg motifs of interest, either http file or file in folder
+        reverse: (bool) If True, adds also reverse complementary of all motifs.
 
     Returns:
         PFM_hocomoco_dict: (dict) PFM in np.array of all motifs. Name of motifs as keys.
@@ -128,12 +116,12 @@ def load_motif_db(
         ICT_hocomoco_dict: (dict) ICT in np.array of all motifs. Name of motifs as keys.
     """
 
-    if motif_file.startswith("http"):
-        handle = urllib.request.urlopen(motif_file)
+    if "https" in file:
+        handle = urllib.request.urlopen(file)
         hocomoco_jaspar = io.TextIOWrapper(handle, encoding="utf-8")
 
     else:
-        hocomoco_jaspar = open(motif_file)
+        hocomoco_jaspar = open(file)
 
     PWM_hocomoco_dict = dict()
     PSSM_hocomoco_dict = dict()
@@ -161,132 +149,114 @@ def load_motif_db(
         ICT_hocomoco_dict[m.name] = PFM * ICT
 
     # Compute reverse of all motifs
-    reverse_DNA = "".maketrans("ACGT", "TGCA")
-    tf_ids = list(PFM_hocomoco_dict.keys())
+    if reverse:
+        reverse_DNA = "".maketrans("ACGT", "TGCA")
+        tf_ids = list(PFM_hocomoco_dict.keys())
 
-    for PFM_name in tf_ids:
-        motif_PWM = PFM_hocomoco_dict[PFM_name]
-        PFM_hocomoco_dict[f"{PFM_name}-"] = np.flip(motif_PWM, (0, 1))
+        for PFM_name in tf_ids:
+            motif_PWM = PFM_hocomoco_dict[PFM_name]
+            PFM_hocomoco_dict[f"{PFM_name}-"] = np.flip(motif_PWM, (0, 1))
 
-        motif_PWM = ICT_hocomoco_dict[PFM_name]
-        ICT_hocomoco_dict[f"{PFM_name}-"] = np.flip(motif_PWM, (0, 1))
+            motif_PWM = ICT_hocomoco_dict[PFM_name]
+            ICT_hocomoco_dict[f"{PFM_name}-"] = np.flip(motif_PWM, (0, 1))
 
-        cons_motif = consensus_hocomoco_dict[PFM_name]
+            cons_motif = consensus_hocomoco_dict[PFM_name]
 
-        rev_motif = cons_motif.translate(reverse_DNA)[::-1]
-        consensus_hocomoco_dict[f"{PFM_name}-"] = rev_motif
+            rev_motif = cons_motif.translate(reverse_DNA)[::-1]
+            consensus_hocomoco_dict[f"{PFM_name}-"] = rev_motif
 
     return (PFM_hocomoco_dict, consensus_hocomoco_dict, ICT_hocomoco_dict)
 
 
-def create_dataframe_mutation_effect(
-    inputs,
-    complete_model: torch.nn.Module,
-    output_directory: str,
-    PFM_hocomoco_dict: dict,
-    pbar,
-):
+def predict_fragments(seq, L_max, completemodel):
     """
-    Return a dataframe with the effect of each mutation.
+    Predicts sure score for input fragment
+    """
+    if torch.cuda.is_available():
+        completemodel = completemodel.cuda()
+
+    onehot_fragment = torch.tensor(np.float32(get_one_hot([seq], L_max))).permute(0, 2, 1)
+    if torch.cuda.is_available():
+        onehot_fragment = onehot_fragment.cuda()
+
+    sure_score = completemodel(onehot_fragment).item()
+
+    return sure_score
+
+
+def get_one_hot(Seqs, L_max, padding="middle", padding_value=0):
+    """
+    Transform list of sequences to one hot.
     Args:
-            model: pytorch model
-            promoters: (pd.Series) pandas series that contains chr, start, end, strand for each promoter
-            output_directory: (str) Output directory to save all hits and mutagenesis dataframe.
-            L_max: (int) Length max. of the model
-            PFM_hocomoco_dict: (dict) Dictionary PFM or IC for motifs of interest
-            compute_sequence_hits: (bool)  If True, the hits for the sequence are also computed.
-            reverse: (bool) If True, compute also for reverse attribution and do the mean with the forward
-            seq: (str) If seq is given, not compute sequence from genome.
-            type_motif_scanning: (str) Either 'PCC' or 'conv_scanning'
+        Seqs: (list) of string sequences
+        L_max: (int) Max length of sequences. Relevant for padding.
+        padding: (str) Type of padding, only 3 possible (left, middle, right). (default: middle)
+        padding_value: (int or float) Value to pad with. (default: 0)
+
+    Returns:
+        X_OneHot: (np.array) Array with length (samples, L_max, 4)
     """
+    # Define nucleotide to vector
+    letter2vector = {
+        "A": np.array([1.0, 0.0, 0.0, 0.0]),
+        "C": np.array([0.0, 1.0, 0.0, 0.0]),
+        "G": np.array([0.0, 0.0, 1.0, 0.0]),
+        "T": np.array([0.0, 0.0, 0.0, 1.0]),
+        "N": np.array([0.0, 0.0, 0.0, 0.0]),
+    }
 
-    # First, create all output directories
-    for dir in inputs["output_directory"]:
-        os.makedirs(dir, exist_ok=True)
+    # get On Hot Encoding
+    X_OneHot = []
+    for seq in Seqs:
 
-    (attribution_all_seqs, parm_score, reference_onehot) = (
-        compute_saturation_mutagenesis(
-            seq=inputs["sequence"],
-            completemodel=complete_model,
-            pbar=pbar,
-        )
-    )
-    
-    # Saving results -- iterate over the attribution_all_seqs matrix
-    for index_sequence, attribution in enumerate(attribution_all_seqs):
-        this_sequence = inputs["sequence"][index_sequence]
-        this_output = inputs["output_directory"][index_sequence]
-        this_output_mutagenesis = os.path.join(this_output, "mutagenesis.txt.gz")
-        
-        #attribution = attribution.reshape(4,len(this_sequence))
-        print('')
-        print(this_output_mutagenesis, flush=True)
-        
-        
-        attribution_df = pd.DataFrame(
-            {
-                "Ref": list(this_sequence),
-                "A": attribution[0, :],
-                "C": attribution[1, :],
-                "G": attribution[2, :],
-                "T": attribution[3, :],
-            }
-        )
-        # Saving as csv
-        attribution_df.to_csv(
-            this_output_mutagenesis ,
-            index=False,
-            sep="\t",
-            compression={"method": "gzip", "compresslevel": 5},
-        )
-    
-    # # now compute the average importance for each nucleotide in the reference sequnece
+        x = np.array([letter2vector[s] for s in seq])
+        diff = L_max - x.shape[0]
+        pw = (L_max - x.shape[0]) / 2
+        PW = [int(np.ceil(pw)), int(np.floor(pw))]
 
-    # onehot_seq = reference_onehot[0]
-    # plot_promoter = promoter_importance_base[["A", "C", "G", "T"]]
-    # vector_importance = plot_promoter.mean(axis=1)
-    # mutagenesis_attribution = np.transpose(
-    #     onehot_seq * np.expand_dims(vector_importance, 1)
-    # )
+        if padding == "middle":
 
-    # hits = run_PARM_motif_scanning(  # old slide_through_attribution_and_PFM
-    #     mutagenesis_attribution=mutagenesis_attribution,
-    #     known_PFM=PFM_hocomoco_dict,
-    #     threshold=0.6,
-    #     cutoff_att=0.001,
-    #     append=True,
-    #     split_pos_neg=False,
-    # )
+            X_OneHot.append(np.pad(x, [PW, [0, 0]], constant_values=padding_value))
 
-    # hits.to_csv(
-    #     file_hits,
-    #     index=False,
-    #     sep="\t",
-    #     compression={"method": "gzip", "compresslevel": 5},
-    # )
-    # return parm_score, promoter_importance_base, hits, reference_onehot
+        elif padding == "right":
+            X_OneHot.append(
+                np.pad(x, [[0, diff], [0, 0]], constant_values=padding_value)
+            )
+
+        elif padding == "left":
+            X_OneHot.append(
+                np.pad(x, [[diff, 0], [0, 0]], constant_values=padding_value)
+            )
+
+        else:
+            raise Exception(f"Padding option not recognised: {padding}")
+
+    X_OneHot = np.array(X_OneHot)
+
+    return X_OneHot
 
 
-def compute_saturation_mutagenesis(
+def motif_attribution(
     seq,
+    L_max,
+    start_motif,
+    end_motif,
     completemodel,
-    ref_to_alt_attribution=True,
+    ref_to_alt_attribution=False,
+    return_reference_score=False,
     index_output=0,
     alt_nt=["A", "C", "G", "T"],
     window_del=False,
-    pbar='',
 ):
     """
     Computes saturation mutagenesis of a given region of a sequence (or the complete one) to determine
-    importance (or attribution) by the model.
+        importance (or attribution) by the model.
 
     Basically it mutates every base to every other possible base.
 
-    If ref_to_alt_attribution == False: The importance of each base is determined
-    by the SuRE score of that base - the mean SuRE score of the other possible 3 bases.
+    If ref_to_alt_attribution == False: The importance of each base is determined by the SuRE score of that base - the mean SuRE score of the other possible 3 bases.
 
-    If ref_to_alt_attribution == True: The importance of each base is determined
-    by the REF - SuRE score of that base.
+    If ref_to_alt_attribution == True: The importance of each base is determined by the REF - SuRE score of that base.
 
 
      Args:
@@ -308,30 +278,39 @@ def compute_saturation_mutagenesis(
     # If seq is a list, we have multiple sequences or index ouputs
     if type(seq) != list:
         seq = [seq]
+    if type(start_motif) != list:
+        start_motif = [start_motif]
+    if type(end_motif) != list:
+        end_motif = [end_motif]
     if type(index_output) != list:
         index_output = [index_output]
 
-    # Defining start and end motifs/sequences
-    start_motif = [0 for _ in seq]
-    end_motif = [len(i) for i in seq]
-    L_max = end_motif
+    # If the start_motif is a list, it should have the same length as seq
+    if len(seq) != len(start_motif) or len(seq) != len(end_motif):
+        raise Exception("Length of start_motif should be the same as the length of seq")
+    # Check if all motifs have the same length
+    if len(set([end_motif[i] - start_motif[i] for i in range(len(seq))])) > 1:
+        raise Exception("All motifs should have the same length")
     size_motifs = end_motif[0] - start_motif[0]
+
+    # if thee window_del is not empty, we should also include deletions
+    ## This new list will contains the original alt_nt, and de deletion information in format "-,2", were the number indicates the length of the deletion
+    if window_del is not False:
+        alt_nt = alt_nt + ["-," + str(wind) for wind in window_del]
 
     if torch.cuda.is_available():
         completemodel = completemodel.cuda()
 
     # Compute SuRE score of reference sequence
-    # PARM_misc.log(f"LMax in line 328: {L_max}\n\n\n\n", '2')
-    reference_onehot = sequence_to_onehot(seq, L_max, for_mutagenesis=True)
-    reference = torch.tensor(np.float32(reference_onehot)).permute(0, 2, 1)
+    reference = torch.tensor(np.float32(get_one_hot(seq, L_max))).permute(0, 2, 1)
     if torch.cuda.is_available():
         reference = reference.cuda()
 
     with torch.no_grad():
         if len(seq) == 1 and len(index_output) == 1:
-            parm_score = completemodel(reference)[0, index_output].detach().cpu()
+            sure_score = completemodel(reference)[0, index_output].detach().cpu()
         else:
-            parm_score = completemodel(reference)[:, index_output].detach().cpu()
+            sure_score = completemodel(reference)[:, index_output].detach().cpu()
 
     del reference  # Free memory
 
@@ -362,7 +341,6 @@ def compute_saturation_mutagenesis(
                     seq_mutated[pos] = ALT
                     ALT_seq = "".join(seq_mutated)
                     seqs_position_mutation.append(ALT_seq)
-#            pbar.update(1)
 
             # The sequences are going to be saved for each position the four nucleotides,
             # so if we compute all the possible sequences, and the model returns the predictions
@@ -370,7 +348,7 @@ def compute_saturation_mutagenesis(
 
     with torch.no_grad():
         alt_reference = torch.tensor(
-            np.float32(sequence_to_onehot(seqs_position_mutation, L_max, for_mutagenesis=True))
+            np.float32(get_one_hot(seqs_position_mutation, L_max))
         ).permute(0, 2, 1)
         if torch.cuda.is_available():
             alt_reference = alt_reference.cuda()
@@ -395,12 +373,12 @@ def compute_saturation_mutagenesis(
                 att_per_seq = []
                 for it_seq in range(len(seq)):  # Loop through sequence
                     att_per_seq.append(
-                        parm_score[it_seq, idx_output] - attribution[it_seq, :, :]
+                        sure_score[it_seq, idx_output] - attribution[it_seq, :, :]
                     )
 
                 att.append(att_per_seq)
             else:
-                att = parm_score[idx_output] - attribution[0, :, :]
+                att = sure_score[idx_output] - attribution[0, :, :]
 
     else:  # If we are interested in the contribution of each base as REF-mean(ALT). --> Not done for deletion
 
@@ -410,22 +388,20 @@ def compute_saturation_mutagenesis(
         ):  # Loop if there's more than one index output
             att_seq = []
             for it_seq in range(len(seq)):  # Loop through sequence
-                mutagenesis_attribution = attribution[it_seq, :, :]
+                attribution_seq = attribution[it_seq, :, :]
 
                 if window_del is not False:
                     index_no_del = np.where([sub != "-" for sub in alt_nt])[
                         0
                     ]  # Check indiced where there's no deletion
-                    mutagenesis_attribution = mutagenesis_attribution[index_no_del, :]
+                    attribution_seq = attribution_seq[index_no_del, :]
 
-                idx = list(range(mutagenesis_attribution.shape[0]))
+                idx = list(range(attribution_seq.shape[0]))
                 att_seq.append(
                     torch.stack(
                         [
-                            mutagenesis_attribution[x]
-                            - mutagenesis_attribution[idx[:x] + idx[x + 1 :]].mean(
-                                axis=0
-                            )
+                            attribution_seq[x]
+                            - attribution_seq[idx[:x] + idx[x + 1 :]].mean(axis=0)
                             for x in idx
                         ]
                     )
@@ -438,29 +414,351 @@ def compute_saturation_mutagenesis(
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    if len(parm_score) == 1:
-        parm_score = parm_score[0]
+    if len(sure_score) == 1:
+        sure_score = sure_score[0]
+    if return_reference_score:
+        return (att, sure_score)
+    return att
 
-    return (att, parm_score, reference_onehot)
+
+def peaks_scanning(attribution, length_peaks=5, number_vocab=4, append=True):
+    """
+    Finds four different types of peaks:
+        (1) Gain_of_activator: Only one possible mutation (e.g. A-->T) has a effect on having HIGHER promoter activity, not the other possible mutations or the surronding nucleotides.
+        (2) Gain_of_repressor: Only one possible mutation (e.g. A-->T) has a effect on having LOWER promoter activity, not the other possible mutations or the surronding nucleotides.
+        (3) Loss_of_activator: All possible mutations (e.g. A-->T,C,G) has a effect on having LOWER promoter activity, as well as the mutations around  that base.
+        (4) Loss_of_repressor: All possible mutations (e.g. A-->T,C,G) has a effect on having HIGHER promoter activity, as well as the mutations around  that base.
 
 
-def run_PARM_motif_scanning(
+    Args:
+        attribution: (np.array) Attribution matrix of size nucleotides X length_sequence
+        length_peaks: (int) Length of the peaks that are going to be scanned (~motif length)
+        number_vocab: (int) number of vocabulary, essentially number of nucleotides (default: 4)
+        append: (bool) if True, then in the attribution_seq a matrix of (4,5) is appended on the end and start of the sequence.
+                                In this way it allows for motifs scanning to also find hits in the edges.
+
+
+    """
+    from itertools import permutations
+
+    if append:
+        zeros_padding = np.zeros(shape=(4, 5))
+        attribution = np.concatenate(
+            [zeros_padding, attribution, zeros_padding], axis=1
+        )
+
+    mid_peak = int(length_peaks / 2)
+
+    # Create Filter to scan for gain of activator (1)
+    filter_gain_of_activator = np.ones((number_vocab, length_peaks), dtype=int)
+    filter_gain_of_activator[0, mid_peak] = (
+        -1
+    ) * length_peaks  # here we assume that the peak is in the 1st base (A), so we will have to change it to the other possible bases later
+
+    ## Attribution matrix will have to be all negative
+
+    # Filter to scan for gain of activator (2)
+    filter_gain_of_repressor = -filter_gain_of_activator
+    ## Attribution matrix will have to be all positive
+
+    # Filter to scan for loss of activator (3)
+    filter_loss_of_activator = np.ones((number_vocab, length_peaks), dtype=int)
+
+    # Filter to scan for loss of repressor (4)
+    filter_loss_of_repressor = -filter_loss_of_activator
+
+    ## START SCANNING
+
+    (
+        score_loss_of_activator,
+        score_loss_of_repressor,
+        score_gain_of_repressor,
+        score_gain_of_activator,
+    ) = ([], [], [], [])
+
+    # Loop through sequence length
+    for start_peak in range(attribution.shape[1] - length_peaks + 1):
+        # Define where the end of the peak should be
+        end_peak = start_peak + length_peaks
+        attribution_position = attribution[:, start_peak:end_peak]
+
+        ##Now we have to do the four possible scanns
+        # (1) GAIN OF ACTIVATOR
+        attribution_position_gain_activator = np.minimum(attribution_position, 0)
+
+        score_gain_of_activator_base = np.mean(
+            attribution_position_gain_activator * filter_gain_of_activator
+        )
+
+        for nt_pos in range(1, number_vocab + 1):
+            # The peak might be in any possible base, so we have to permute the filter position on the nucleotides axis and do the 3 possible remaining scannns
+
+            order = (
+                list(range(number_vocab))[nt_pos:]
+                + list(range(number_vocab))[:(nt_pos)]
+            )
+
+            att_score = np.mean(
+                attribution_position_gain_activator * filter_gain_of_activator[order, :]
+            )
+
+            if score_gain_of_activator_base < att_score:
+                score_gain_of_activator_base = (
+                    att_score  # Take the one that maximizes the score
+                )
+
+        score_gain_of_activator.append(score_gain_of_activator_base)
+
+        # (2) GAIN OF REPRESSOR
+
+        attribution_position_gain_repressor = np.maximum(attribution_position, 0)
+
+        score_gain_of_repressor_base = np.mean(
+            attribution_position_gain_repressor * filter_gain_of_repressor
+        )
+        for nt_pos in range(1, number_vocab + 1):
+            # The peak might be in any possible base, so we have to permute the filter position on the nucleotides axis and do the 3 possible remaining scannns
+
+            order = (
+                list(range(number_vocab))[nt_pos:]
+                + list(range(number_vocab))[:(nt_pos)]
+            )
+
+            att_score = np.mean(
+                attribution_position_gain_repressor * filter_gain_of_repressor[order, :]
+            )
+
+            if score_gain_of_repressor_base < att_score:
+                score_gain_of_repressor_base = (
+                    att_score  # Take the one that maximizes the score
+                )
+
+        score_gain_of_repressor.append(score_gain_of_repressor_base)
+
+        # (3) LOSS OF ACTIVATOR
+        score_loss_of_activator.append(
+            np.mean(attribution_position * filter_loss_of_activator)
+        )
+
+    score_loss_of_activator = np.array(score_loss_of_activator)
+    # (4) LOSS OF REPRESSOR
+    ## Its the same but the opposite of activator
+    score_loss_of_repressor = -(score_loss_of_activator)
+
+    def find_unique_peaks_in_region(scores_computed, length_peaks):
+        ##To make sure that we find the clearer peaks (center of the motif), and we find a unique peak
+        ## instead of high values around
+        ## we take the largest value within a small range
+
+        step = int(length_peaks * 2)  # Window to run max_length
+
+        start_possibles = (
+            0,
+            length_peaks,
+        )  # Different starts so it doesnt get stuck in an edge
+        for start in start_possibles:
+            for ind_start in range(start, len(scores_computed) - step, step):
+
+                # Create index where region of interest is
+                index_interest = np.arange(ind_start, (ind_start + step))
+
+                # Obtain max value in that region
+                max_score_region = np.max(scores_computed[index_interest])
+
+                # Obtain index of those which don't have the highest value
+                region_no_max = index_interest[
+                    (scores_computed < max_score_region)[index_interest]
+                ]
+
+                scores_computed[region_no_max] = 0
+
+        return scores_computed
+
+    score_loss_of_activator = find_unique_peaks_in_region(
+        score_loss_of_activator, length_peaks
+    )
+    score_loss_of_repressor = find_unique_peaks_in_region(
+        score_loss_of_repressor, length_peaks
+    )
+    score_gain_of_activator = np.array(score_gain_of_activator)
+    score_gain_of_repressor = np.array(score_gain_of_repressor)
+
+    if append:
+        score_loss_of_repressor = score_loss_of_repressor[5:(-5)]
+        score_loss_of_activator = score_loss_of_activator[5:(-5)]
+        score_gain_of_activator = score_gain_of_activator[5:(-5)]
+        score_gain_of_repressor = score_gain_of_repressor[5:(-5)]
+
+    dict_scores = {
+        "score_gain_of_activator": score_gain_of_activator,
+        "score_gain_of_repressor": score_gain_of_repressor,
+        "score_loss_of_activator": score_loss_of_activator,
+        "score_loss_of_repressor": score_loss_of_repressor,
+    }
+
+    return dict_scores
+
+
+def compute_attribution(
+    seq,
+    L_max,
+    start_motif,
+    end_motif,
+    completemodel,
+    index_output=0,
+    alt_nt=["A", "C", "G", "T"],
+    window_del=False,
+):
+    """
+    Computes saturation mutagenesis of a given region of a sequence (or the complete one) to determine
+        importance (or attribution) by the model.
+
+    Basically it mutates every base to every other possible base. The importance of each base
+    is determined by the SuRE score of that base - the mean SuRE score of the other possible 3 bases.
+     Args:
+       seq: (str or list) sequence (str) or list of sequences to study
+       L_max: (int) input length sequence of the model. Necessary for padding.
+       start_motif: (int) start of the motif of interest, relative to seq.
+       end_motif: (int) end of the motif of interest, relative to seq.
+       completemodel: (fun) model used to compute attributions
+       index_output: (int) Which index of the output to take, usually if the model only outputs one cell line and/or replicates there's only one output value and index is 0.
+       alt_nt: (list of str) List of possible nucleotides to mutate to in a list. --> ['A']
+       window_del: (list of int) If it is not False, provide a list of integer(s) e.g. [1], or [1,2]. It will compute the effect of a deletion of the different sizes provided in the list.
+
+     Returns:
+       att: (torch.Tensor) array of shape (n_bases, length_motif)
+       ref_score: (int) Returns prediction of Reference Sequence.
+
+    """
+
+    att, ref_score = motif_attribution(
+        seq,
+        L_max,
+        start_motif,
+        end_motif,
+        completemodel,
+        ref_to_alt_attribution=True,
+        return_reference_score=True,
+        index_output=index_output,
+        alt_nt=alt_nt,
+        window_del=window_del,
+    )
+
+    return (att, ref_score)
+
+
+def compute_correlation_between_motifs(
+    pfm, motif_attribution, ICM=False, return_PFM=False
+):
+    """
+    Normalizes motif attribution defined by model, and computes correlation
+    between known PFM and normalized motif attribution.
+
+     Args:
+        pfm: (np.array) known PFM
+        motif_attribution: (np.array) attribution computed for a motif (bases, length motif)
+        return_PFM: (boolean) if True return the normalized motif_attribution
+
+     Returns:
+       rho: (float) corrlation between known PSSM and attribution PSMM
+
+    """
+    ## Compute the correlation score between known PPM and the one of the attribution scores
+
+    ## 1. Positive attributions (activators)
+
+    # p_mut (bases, position)
+    #  CREATE PSSM (probability)
+    p_mut = np.maximum(motif_attribution, 0)  # If negative attribution, set to 0
+    p_mut[:, np.sum(p_mut, axis=0) == 0] = (
+        0.25  # If in a position all nt are 0, set all of them to 0.25
+    )
+    p_mut = p_mut / np.sum(p_mut, axis=0, keepdims=True)  # Normalize
+    p_mut = p_mut + 0.01  # Add pseudocount
+    p_mut_pos = p_mut / np.sum(p_mut, axis=0, keepdims=True)
+    rho_pos_prob = np.corrcoef([p_mut.flatten(), pfm.flatten()])[0, 1]
+    rho_pos_prob = np.max([rho_pos_prob, 0])
+
+    #  CREATE BITS, INFORMATION CONTENT MATRIX
+    if ICM is not False:
+        p_mut_IC_pos = np.maximum(
+            motif_attribution, 0
+        )  # If negative attribution, set to 0
+        max = np.sum(p_mut_IC_pos, axis=0).max()
+        p_mut_IC_pos = p_mut_IC_pos / max * 2
+        rho_pos_ICM = np.corrcoef([p_mut_IC_pos.flatten(), ICM.flatten()])[0, 1]
+        rho_pos_ICM = np.max([rho_pos_ICM, 0])
+
+    ## 2. Negative attributions (repressors)
+
+    # p_mut (position, bases)
+    p_mut_neg = -np.minimum(motif_attribution, 0)  # If negative attribution, set to 0
+    p_mut_neg[:, np.sum(p_mut_neg, axis=0) == 0] = (
+        0.25  # If in a position all nt are 0, set all of them to 0.25
+    )
+    p_mut_neg = p_mut_neg / np.sum(p_mut_neg, axis=0, keepdims=True)  # Normalize
+    p_mut_neg = p_mut_neg + 0.01  # Add pseudocount
+    p_mut_neg = p_mut_neg / np.sum(p_mut_neg, axis=0, keepdims=True)
+    rho_neg_prob = np.corrcoef([p_mut_neg.flatten(), pfm.flatten()])[0, 1]
+    rho_neg_prob = np.max([rho_neg_prob, 0])
+
+    #  CREATE BITS, INFORMATION CONTENT MATRIX
+    if ICM is not False:
+        p_mut_IC_neg = -np.minimum(
+            motif_attribution, 0
+        )  # If negative attribution, set to 0
+        max = np.sum(p_mut_IC_neg, axis=0).max()
+        p_mut_IC_neg = p_mut_IC_neg / max * 2
+        rho_neg_ICM = np.corrcoef([p_mut_IC_neg.flatten(), ICM.flatten()])[0, 1]
+        rho_neg_ICM = np.max([rho_neg_ICM, 0])
+
+    # sign_attribution = np.mean(motif_attribution*pfm)
+
+    # Return the one that has higher correlation in absolute value
+    # if sign_attribution >= 0:
+
+    if rho_pos_prob >= rho_neg_prob:
+        rho_prob = rho_pos_prob
+        p_mut_prob = p_mut_pos
+    else:
+        rho_prob = -rho_neg_prob
+        p_mut_prob = p_mut_neg
+
+    if ICM is not False:
+        if rho_pos_ICM >= rho_neg_ICM:
+            rho_ICM = rho_pos_ICM
+            p_mut_IC = p_mut_IC_pos
+        else:
+            rho_ICM = -rho_neg_ICM
+            p_mut_IC = p_mut_IC_neg
+
+    if not return_PFM and ICM is False:
+        return rho_prob
+    elif not return_PFM:
+        return rho_ICM
+    else:
+        return (rho_prob, p_mut_prob, rho_ICM, p_mut_IC)
+
+def run_motif_scanning(
     known_PFM,
-    mutagenesis_attribution,
+    attribution_seq,
     threshold=0.6,
-    cutoff_att=0.001,
+    attribution=False,
     append=True,
+    multiple_one_hot=False,
+    normalize=False,
     split_pos_neg=False,
+    cutoff_att=0.001,
 ):
     """
     Slides through sequence, computes attribution and then check which motifs and where have a high correlation.
 
     Args:
         known_PFM: (dict) dict of known PFM with name of PFM as keys, optionally can also be used IC instead of PFM.
-        mutagenesis_attribution: (np.array) Array showing attribution of sequence obtained from in silico mutagenesis.
+        attribution_seq: (np.array) Array showing attribution of sequence obtained from in silico mutagenesis.
         attribution: (bool) If true returns as an extra column the mean attribution * PFM of that hit.
         threshold: (float) Threshold to consider a good match between known TFBS and computed attribution.
-        append: (bool) if True, then in the mutagenesis_attribution a matrix of (4,5) is appended on the end and start of the sequence.
+        append: (bool) if True, then in the attribution_seq a matrix of (4,5) is appended on the end and start of the sequence.
                                 In this way it allows for motifs scanning to also find hits in the edges.
         multiple_one_hot (np.array): If not False, provide one-hot encoded sequence, and the scanning will be done with the normalized sequence*one_hot.
         normalize: (bool) If normalize each base to add up to 1. If IC instead of PFM provided we recommend to not use it.
@@ -471,11 +769,49 @@ def run_PARM_motif_scanning(
 
     """
 
-    zeros_padding = np.zeros(shape=(4, 5))
-    mutagenesis_attribution = np.concatenate(
-        [zeros_padding, mutagenesis_attribution, zeros_padding], axis=1
-    )
-    length_sequence = mutagenesis_attribution.shape[-1]
+    if append:
+        zeros_padding = np.zeros(shape=(4, 5))
+        attribution_seq = np.concatenate(
+            [zeros_padding, attribution_seq, zeros_padding], axis=1
+        )
+        if multiple_one_hot is not False:
+            multiple_one_hot = np.concatenate(
+                [zeros_padding, multiple_one_hot, zeros_padding], axis=1
+            )
+    ###Normalize whole attribution sequence
+
+    length_sequence = attribution_seq.shape[-1]
+
+    if split_pos_neg:
+
+        ## 1. Positive attributions (activators)
+        p_mut_pos = np.maximum(attribution_seq, 0)  # If negative attribution, set to 0
+        ## 2. Negative attributions (inhibitors)
+        p_mut_neg = -np.minimum(attribution_seq, 0)  # If negative attribution, set to 0
+
+    if normalize:
+        p_mut_pos[:, np.sum(p_mut_pos, axis=0) == 0] = (
+            0.25  # If in a position all nt are 0, set all of them to 0.25
+        )
+        p_mut_pos = p_mut_pos / np.sum(p_mut_pos, axis=0, keepdims=True)  # Normalize
+        p_mut_pos = p_mut_pos + 0.01  # Add pseudocount
+        p_mut_pos = p_mut_pos / np.sum(p_mut_pos, axis=0, keepdims=True)
+
+        p_mut_neg[:, np.sum(p_mut_neg, axis=0) == 0] = (
+            0.25  # If in a position all nt are 0, set all of them to 0.25
+        )
+        p_mut_neg = p_mut_neg / np.sum(p_mut_neg, axis=0, keepdims=True)  # Normalize
+        p_mut_neg = p_mut_neg + 0.01  # Add pseudocount
+        p_mut_neg = p_mut_neg / np.sum(p_mut_neg, axis=0, keepdims=True)
+
+    # If multiple_one_hot argument is not False. We will multiple the normalized sequence by the one hot encoded sequence.
+    ## In this way we will only report hits of TF in the sequence, not putative.
+    if multiple_one_hot is not False:
+        p_mut_neg = p_mut_neg * multiple_one_hot
+        print("p_mut_neg", p_mut_neg)
+        p_mut_pos = p_mut_pos * multiple_one_hot
+        print("p_mut_pos", p_mut_pos)
+
     hits = []
 
     rho_pos_prob, rho_neg_prob, rho_prob = 0, 0, 0
@@ -496,13 +832,22 @@ def run_PARM_motif_scanning(
         for start_motif in range(length_sequence - length_PFM + 1):
             end_motif = start_motif + length_PFM
 
-            mutagenesis_attribution_short = mutagenesis_attribution[
-                :, start_motif:end_motif
-            ]
+            if split_pos_neg:
+                p_mut_short_pos = p_mut_pos[:, start_motif:end_motif]
+                p_mut_short_neg = p_mut_neg[:, start_motif:end_motif]
+
+            else:
+                attribution_seq_short = attribution_seq[:, start_motif:end_motif]
 
             # Avoid computing hits if the attributions are super small
-            if np.abs(cutoff_att).sum() < cutoff_att:
-                continue
+            if split_pos_neg:
+                if (p_mut_short_pos.sum() < cutoff_att) and (
+                    np.abs(p_mut_neg).sum() < (cutoff_att)
+                ):
+                    continue
+            else:
+                if np.abs(cutoff_att).sum() < cutoff_att:
+                    continue
 
             # Loop through motifs in the same length group
 
@@ -511,29 +856,94 @@ def run_PARM_motif_scanning(
                 PFM = known_PFM[name_motif]
                 sum_motif = PFM.sum().sum()
 
-                rho_prob = np.corrcoef(
-                    [mutagenesis_attribution_short.flatten(), PFM.flatten()]
-                )[0, 1]
+                if split_pos_neg:
+                    ##Positive correlation
+                    rho_pos_prob = np.corrcoef(
+                        [p_mut_short_pos.flatten(), PFM.flatten()]
+                    )[0, 1]
+                    rho_pos_prob = np.max([rho_pos_prob, 0])
 
-                # if attribution is not False:
+                    ##Negative correlation
+                    rho_neg_prob = np.corrcoef(
+                        [p_mut_short_neg.flatten(), PFM.flatten()]
+                    )[0, 1]
+                    rho_neg_prob = np.max([rho_neg_prob, 0])
 
-                ##If there's a hit --> Save the product of the attribution x PFM --> Useful to later take the longest motif
-                if (
-                    (rho_pos_prob > threshold)
-                    or (rho_neg_prob > threshold)
-                    or (np.abs(rho_prob) > threshold)
-                ):
-                    if split_pos_neg:
-                        mutagenesis_attribution_short = mutagenesis_attribution[
-                            :, start_motif:end_motif
-                        ]
-                    att_x_PFM = (
-                        mutagenesis_attribution_short.flatten() * PFM.flatten()
-                    ).mean()
-                    att_pos = (mutagenesis_attribution_short.flatten()).sum()
+                else:
+                    rho_prob = np.corrcoef(
+                        [attribution_seq_short.flatten(), PFM.flatten()]
+                    )[0, 1]
+
+                if attribution is not False:
+
+                    ##If there's a hit --> Save the product of the attribution x PFM --> Useful to later take the longest motif
+                    if (
+                        (rho_pos_prob > threshold)
+                        or (rho_neg_prob > threshold)
+                        or (np.abs(rho_prob) > threshold)
+                    ):
+
+                        if split_pos_neg:
+                            attribution_seq_short = attribution_seq[
+                                :, start_motif:end_motif
+                            ]
+                        att_x_PFM = (
+                            attribution_seq_short.flatten() * PFM.flatten()
+                        ).mean()
+                        att_pos = (attribution_seq_short.flatten()).sum()
+
+                        if append:
+                            start_motif_name = start_motif - 5
+                            end_motif_name = end_motif - 5
+
+                        if split_pos_neg:
+                            if rho_pos_prob > threshold:
+                                hits.append(
+                                    [
+                                        name_motif,
+                                        rho_pos_prob,
+                                        start_motif_name,
+                                        end_motif_name,
+                                        att_pos,
+                                        att_x_PFM,
+                                        length_PFM,
+                                        sum_motif,
+                                    ]
+                                )
+
+                            if rho_neg_prob > threshold:
+                                hits.append(
+                                    [
+                                        name_motif,
+                                        (-rho_neg_prob),
+                                        start_motif_name,
+                                        end_motif_name,
+                                        att_pos,
+                                        att_x_PFM,
+                                        length_PFM,
+                                        sum_motif,
+                                    ]
+                                )
+
+                        else:
+                            hits.append(
+                                [
+                                    name_motif,
+                                    rho_prob,
+                                    start_motif_name,
+                                    end_motif_name,
+                                    att_pos,
+                                    att_x_PFM,
+                                    length_PFM,
+                                    sum_motif,
+                                ]
+                            )
+
+                else:
                     if append:
                         start_motif_name = start_motif - 5
                         end_motif_name = end_motif - 5
+
                     if split_pos_neg:
                         if rho_pos_prob > threshold:
                             hits.append(
@@ -542,10 +952,7 @@ def run_PARM_motif_scanning(
                                     rho_pos_prob,
                                     start_motif_name,
                                     end_motif_name,
-                                    att_pos,
-                                    att_x_PFM,
                                     length_PFM,
-                                    sum_motif,
                                 ]
                             )
                         if rho_neg_prob > threshold:
@@ -555,12 +962,10 @@ def run_PARM_motif_scanning(
                                     (-rho_neg_prob),
                                     start_motif_name,
                                     end_motif_name,
-                                    att_pos,
-                                    att_x_PFM,
                                     length_PFM,
-                                    sum_motif,
                                 ]
                             )
+
                     else:
                         hits.append(
                             [
@@ -568,233 +973,515 @@ def run_PARM_motif_scanning(
                                 rho_prob,
                                 start_motif_name,
                                 end_motif_name,
-                                att_pos,
-                                att_x_PFM,
                                 length_PFM,
-                                sum_motif,
                             ]
                         )
 
+    if attribution is not False:
+        hits = pd.DataFrame(
+            hits,
+            columns=[
+                "name_motif",
+                "rho",
+                "start",
+                "end",
+                "att",
+                "att_x_PFM",
+                "length_motif",
+                "sum_motif",
+            ],
+        )
+
+    else:
+        hits = pd.DataFrame(
+            hits, columns=["name_motif", "rho", "start", "end", "length_motif"]
+        )
+
+    return hits
+
+
+def slide_through_attribution_and_PFM_fast(
+    known_PFM, attribution_seq, append=True, cutoff_att=0.001
+):
+    """
+    Slides through sequence, computes attribution and then check which motifs and where have a high correlation.
+
+    Args:
+        known_PFM: (dict) dict of known PFM with name of PFM as keys, optionally can also be used IC instead of PFM.
+        attribution_seq: (np.array) Array showing attribution of sequence obtained from in silico mutagenesis.
+        append: (bool) if True, then in the attribution_seq a matrix of (4,5) is appended on the end and start of the sequence.
+                                In this way it allows for motifs scanning to also find hits in the edges.
+
+    Returns:
+        hits: (list) Hits of list that contains [motif_name, correlation, start_hit, end_hit]
+
+    """
+
+    if append:
+        zeros_padding = np.zeros(shape=(4, 5))
+        attribution_seq = np.concatenate(
+            [zeros_padding, attribution_seq, zeros_padding], axis=1
+        )
+    ###Normalize whole attribution sequence
+
+    length_sequence = attribution_seq.shape[-1]
+
+    if torch.cuda.is_available():
+        attribution_seq = torch.tensor(attribution_seq).cuda()
+
+    hits = []
+
+    # Group motifs by their length
+    ## this way we can save a bit of time by doing the scanning for motifs that have the same length
+    t = time.time()
+    unique_lengths_motifs = np.unique(
+        np.array([x.shape[1] for x in known_PFM.values()])
+    )
+    length_to_motif_name = {len: [] for len in unique_lengths_motifs}
+    for name_motif, PFM in known_PFM.items():
+        length_to_motif_name[PFM.shape[1]].append(name_motif)
+    known_PFM = {
+        name_motif: torch.from_numpy(PFM.copy()).cuda()
+        for name_motif, PFM in known_PFM.items()
+    }
+
+    #
+    # Loop through group of length motifs
+    for length_PFM, name_motifs_same_length in length_to_motif_name.items():
+
+        # shape before: bases, length
+        attribution_seq_slid = attribution_seq.permute(1, 0).unfold(
+            dimension=0, size=length_PFM, step=1
+        )
+
+        # shape before: sliding_window, bases, length
+
+        # Loop through sequence length
+        for it_pos, att_slid in enumerate(attribution_seq_slid):
+
+            att_abs_sum = att_slid.abs().sum().item()
+
+            # Avoid computing hits if the attributions are super small
+            if att_abs_sum < cutoff_att:
+                continue
+
+            # Loop through motifs in the same length group
+
+            for name_motif in name_motifs_same_length:
+
+                PFM = known_PFM[name_motif]
+                ##Pearson correlation
+                rho_prob = torch.corrcoef(
+                    torch.stack([att_slid.flatten(), PFM.flatten()])
+                )[0, 1].item()
+
+                ##If there's a hit --> Save the product of the attribution x PFM --> Useful to later take the longest motif
+                hits.append([name_motif, rho_prob, it_pos, att_abs_sum, length_PFM])
+
     hits = pd.DataFrame(
-        hits,
-        columns=[
-            "name_motif",
-            "rho",
-            "start",
-            "end",
-            "att",
-            "att_x_PFM",
-            "length_motif",
-            "sum_motif",
-        ],
+        hits, columns=["name_motif", "rho", "start", "att_abs_sum", "length_motif"]
     )
 
     return hits
 
 
-def plot_mutagenesis_results(
-    sequence,
-    mutagenesis_df,
-    motif_scanning_results,
-    sequence_onehot,
-    sequence_score,
-    model_name,
-    motif_db_ICT,
+def conv_with_PFM_slide_through_attribution(
+    known_PFM, attribution_seq, multiple_one_hot=False, normalize=False, sequence=False
 ):
+    """
+    Slides through sequence of attribution and then computes convolution for each given motif.
 
-    # Create Series of the positions
-    positions = pd.Series(list(range(len(sequence))))
-    mutagenesis_df["positions"] = positions
+    Args:
+        known_PFM: (dict) dict of known PFM with name of PFM as keys, optionally can also be used IC instead of PFM.
+        attribution_seq: (np.array) Array showing attribution of sequence obtained from in silico mutagenesis.
+        multiple_one_hot (np.array): If not False, provide one-hot encoded sequence, and the scanning will be done with the normalized sequence*one_hot.
+        normalize: (bool) If normalize each base to add up to 1. If IC instead of PFM provided we recommend to not use it.
+        sequence: (bool) If what is given is the sequence the p_mut_neg is not used
 
-    # Start creating the plotting df
-    plotting_df = mutagenesis_df[["A", "C", "G", "T"]]
-    # Make positions as index
-    plotting_df.index = positions.astype(str)
-    onehot_seq = sequence_onehot[0]
+    Returns:
+        hits: (list) Hits of list that contains [motif_name, correlation, start_hit, end_hit]
 
-    # Start axis
-    fig, ax = plt.subplots(
-        figsize=(40, 7),
-        nrows=6,
-        ncols=2,
-        gridspec_kw={"height_ratios": [1, 3, 4, 1, 1, 1], "width_ratios": [50, 1]},
+    """
+
+    length_sequence = attribution_seq.shape[-1]
+
+    ## 1. Positive attributions (activators)
+    p_mut_pos = np.maximum(attribution_seq, 0.0)  # If negative attribution, set to 0
+    ## 2. Negative attributions (inhibitors)
+    p_mut_neg = -np.minimum(attribution_seq, 0.0)  # If negative attribution, set to 0
+
+    if normalize:
+        p_mut_pos[:, np.sum(p_mut_pos, axis=0) == 0] = (
+            0.25  # If in a position all nt are 0, set all of them to 0.25
+        )
+        p_mut_pos = p_mut_pos / np.sum(p_mut_pos, axis=0, keepdims=True)  # Normalize
+        p_mut_pos = p_mut_pos + 0.01  # Add pseudocount
+        p_mut_pos = p_mut_pos / np.sum(p_mut_pos, axis=0, keepdims=True)
+
+        p_mut_neg[:, np.sum(p_mut_neg, axis=0) == 0] = (
+            0.25  # If in a position all nt are 0, set all of them to 0.25
+        )
+        p_mut_neg = p_mut_neg / np.sum(p_mut_neg, axis=0, keepdims=True)  # Normalize
+        p_mut_neg = p_mut_neg + 0.01  # Add pseudocount
+        p_mut_neg = p_mut_neg / np.sum(p_mut_neg, axis=0, keepdims=True)
+
+    # If multiple_one_hot argument is not False. We will multiple the normalized sequence by the one hot encoded sequence.
+    ## In this way we will only report hits of TF in the sequence, not putative.
+    if multiple_one_hot is not False:
+        p_mut_neg = p_mut_neg * multiple_one_hot
+        print("p_mut_neg", p_mut_neg)
+        p_mut_pos = p_mut_pos * multiple_one_hot
+        print("p_mut_pos", p_mut_pos)
+
+    # Now transform the attributions into torch
+    p_mut_pos = torch.tensor(p_mut_pos)
+    p_mut_neg = torch.tensor(p_mut_neg)
+
+    if torch.cuda.is_available():
+        p_mut_neg = p_mut_neg.cuda()
+        p_mut_pos = p_mut_pos.cuda()
+
+    hits = []
+
+    # Group motifs by their length
+    ## this way we can save a bit of time by doing the scanning for motifs that have the same length
+    t = time.time()
+    unique_lengths_motifs = np.unique(
+        np.array([x.shape[1] for x in known_PFM.values()])
     )
-    plt.subplots_adjust(wspace=0.001)
-    fig.delaxes(ax[3, 0])
-    fig.delaxes(ax[0, 1])
-    fig.delaxes(ax[1, 1])
-    fig.delaxes(ax[2, 1])
-    fig.delaxes(ax[3, 1])
-    fig.delaxes(ax[4, 1])
-    fig.delaxes(ax[5, 1])
+    length_to_motif_name = {len: [] for len in unique_lengths_motifs}
+    for name_motif, PFM in known_PFM.items():
+        length_to_motif_name[PFM.shape[1]].append(name_motif)
 
-    # ====================================================================================
-    # Row 1: DNA sequence; ax[0,0]
-    plot_logo(  # old logomaker_plots_individual
-        mutagenesis_df=np.transpose(onehot_seq),
-        ax=ax[0, 0],
-        y_label="",
+    padding = 0
+
+    pos_hits, neg_hits = np.empty(
+        [len(known_PFM), length_sequence + padding * 2]
+    ), np.empty([len(known_PFM), length_sequence + padding * 2])
+    sum_attribution_pos, sum_attribution_neg = np.empty(
+        [len(known_PFM), length_sequence + padding * 2]
+    ), np.empty([len(known_PFM), length_sequence + padding * 2])
+
+    # Loop through group of length motifs --> The kernel size of conv1d has to have the same length
+
+    curent_1st_motif = 0
+    for length_PFM, name_motifs_same_length in length_to_motif_name.items():
+        num_motifs = len(name_motifs_same_length)
+
+        if length_PFM % 2 == 0:
+            padding = (length_PFM // 2, length_PFM // 2 - 1)
+        else:
+            padding = (length_PFM // 2, length_PFM // 2)
+        padding = "same"
+
+        conv_motifs = torch.nn.Conv1d(
+            4, (num_motifs + 1), length_PFM, stride=1, padding=padding, bias=False
+        )  # We add an extra motif which is the one that is going to sum all the contributions in a winddow
+
+        motifs_PFM = list(map(known_PFM.get, name_motifs_same_length))
+        motifs_PFM.append(
+            np.ones((4, length_PFM))
+        )  # We add an extra motif which is the one that is going to sum all the contributions in a winddow
+
+        # Fill in the conv layer with the known motifs of Hocomoco
+        conv_motifs.weight = torch.nn.Parameter(torch.from_numpy(np.array(motifs_PFM)))
+
+        if torch.cuda.is_available():
+            conv_motifs = conv_motifs.cuda()
+
+        out_pos = conv_motifs(p_mut_pos).cpu().detach().numpy()
+
+        if sequence is not True:
+            out_neg = conv_motifs(p_mut_neg).cpu().detach().numpy()
+
+        pos_hits[curent_1st_motif : (curent_1st_motif + num_motifs)] = np.maximum(
+            out_pos[:-1], 0
+        )  # ReLU is the same as doing np.maximum
+        sum_attribution_pos[curent_1st_motif : (curent_1st_motif + num_motifs)] = (
+            np.repeat(out_pos[-1:], num_motifs, axis=0)
+        )
+
+        if sequence is not True:
+            neg_hits[curent_1st_motif : (curent_1st_motif + num_motifs)] = np.maximum(
+                out_neg[:-1], 0
+            )
+            sum_attribution_neg[curent_1st_motif : (curent_1st_motif + num_motifs)] = (
+                np.repeat(out_neg[-1:], num_motifs, axis=0)
+            )
+
+        curent_1st_motif += num_motifs
+
+    # Transform into a na pandas dataframe
+
+    # Current shape n_motif x length_fragment
+
+    pos_hits = pd.DataFrame(pos_hits, index=sum(length_to_motif_name.values(), []))
+    pos_hits["motif"] = pos_hits.index
+    pos_hits = pd.melt(
+        pos_hits, id_vars="motif", var_name="position", value_name="conv_score"
     )
-    ax[0, 0].set_title(f"PARM {model_name}: {sequence_score}", fontsize="large")
-    # remove y-axis info from this row
-    ax[0, 0].yaxis.set_tick_params(labelleft=False)
-    ax[0, 0].set_yticks([])
-    # ====================================================================================
-    # Row 2: attribution track;  ax[1,0] =================================================
-    # ====================================================================================
-    # First, calculate the attribution track
-    attribution = plotting_df.mean(axis=1, skipna=True)
-    attribution = np.transpose(onehot_seq * np.expand_dims(attribution, 1))
-    plot_logo(
-        mutagenesis_df=attribution,
-        ax=ax[1, 0],
-        y_label="Variant effect\n(REF-mean(ALT))",
-    )
-    # ====================================================================================
-    # Row 3: heatmap track; ax[2,0] ======================================================
-    # ====================================================================================
-    plotting_df_transposed = plotting_df.T
-    mask = plotting_df_transposed.isnull()
-    max_abs_value = plotting_df.abs().max().max()
-    _ = sns.heatmap(
-        plotting_df_transposed,
-        ax=ax[2, 0],
-        cmap="RdBu",
-        center=0,
-        xticklabels=10,
-        cbar=False,
-        mask=mask,
-        vmin=(-max_abs_value),
-        vmax=max_abs_value,
-    )
-    ax[2, 0].set_ylabel(f"")
-    ax[2, 0].set_xlabel(f"Position (bp)")
-    fig.colorbar(
-        ax[2, 0].get_children()[0],
-        ax=ax[2, 1],
-        orientation="vertical",
-        fraction=0.5,
-        label="Variant effect\n(REF-ALT)",
-    )
-    # ====================================================================================
-    # Row 4 (and 5): scanned motifs; ax[4,0] =============================================
-    # ====================================================================================
-    plot_scanned_motifs(
-        attribution=attribution,
-        ax=[ax[4, 0], ax[5, 0]],
-        motif_scanning_results=motif_scanning_results,
-        motifs_ICT=motif_db_ICT,
-        fig=fig,
-    )
-    return (fig, ax)
+    pos_hits["attribution"] = "pos"
 
-
-def plot_logo(mutagenesis_df, ax: plt.axis, y_label: str):
-
-    # Parse mutagenesis_df
-    mutagenesis_to_plot = pd.DataFrame(
-        np.transpose(mutagenesis_df), columns=["A", "C", "G", "T"]
+    sum_attribution_pos = pd.DataFrame(
+        sum_attribution_pos, index=sum(length_to_motif_name.values(), [])
     )
-    # Define colors
-    color_scheme = {
-        "A": colors.to_rgb("#00811C"),  # green
-        "C": colors.to_rgb("#2000C7"),  # blue
-        "G": colors.to_rgb("#FFB32C"),  # yeellow
-        "T": colors.to_rgb("#D00001"),
-    }  # red
-
-    plot = logomaker.Logo(
-        mutagenesis_to_plot, ax=ax, color_scheme=color_scheme, baseline_width=1
+    sum_attribution_pos["motif"] = sum_attribution_pos.index
+    sum_attribution_pos = pd.melt(
+        sum_attribution_pos,
+        id_vars="motif",
+        var_name="position",
+        value_name="sum_attribution",
+    )
+    pos_hits = pos_hits.merge(
+        sum_attribution_pos, how="inner", on=["motif", "position"]
     )
 
-    plot.style_spines(visible=False)
-    plot.style_spines(spines=["left"], visible=True)
-    plot.ax.set_ylabel(y_label, labelpad=-1, fontsize="medium")
-    plot.ax.set_xticks([])
+    if sequence:
+        return pos_hits
 
-    return plot
+    neg_hits = pd.DataFrame(neg_hits, index=sum(length_to_motif_name.values(), []))
+    neg_hits["motif"] = neg_hits.index
+    neg_hits = pd.melt(
+        neg_hits, id_vars="motif", var_name="position", value_name="conv_score"
+    )
+    neg_hits["attribution"] = "neg"
+
+    sum_attribution_neg = pd.DataFrame(
+        sum_attribution_neg, index=sum(length_to_motif_name.values(), [])
+    )
+    sum_attribution_neg["motif"] = sum_attribution_neg.index
+    sum_attribution_neg = pd.melt(
+        sum_attribution_neg,
+        id_vars="motif",
+        var_name="position",
+        value_name="sum_attribution",
+    )
+    neg_hits = neg_hits.merge(
+        sum_attribution_neg, how="inner", on=["motif", "position"]
+    )
+
+    hits = pd.concat([pos_hits, neg_hits])
+
+    return hits
 
 
-def plot_scanned_motifs(attribution, ax, motif_scanning_results, motifs_ICT, fig):
-    attribution_shape = attribution.shape
-    length_sequence = attribution_shape[1]
-    percentage = 0.15  # Only do the scanning of the motifs that attributions is at least 1-percentage the attribution of the max motif
+def plot_logo(
+    matrix,
+    ax_name,
+    ylabel,
+    colors_base=False,
+    highlight_position=False,
+    fontsize="medium",
+    max_lim=False,
+    min_lim=False,
+):
+    """
+    Make plot given axis of DNA sequence importance.
+        matrix (np.array) Importance matrix of sequence
+        ax_name: matplotlib axis
+        ylabel (str): Label on y axis
+        colors_base (bool): If True use Vini's colors
+        highlight_position (False or int): If not False, it will highlight the position indicated. Relative to start of the matrix.
+        max_lim: (int) If not False, set the max limit of the y axis
+        min_lim: (int) If not False, set the min limit of the y axis
 
-    motif_scanning_results["att_abs"] = np.abs(motif_scanning_results.att)
+    """
+
+    tf_mut_score_plot = pd.DataFrame(np.transpose(matrix), columns=["A", "C", "G", "T"])
+
+    if colors_base:
+        color_scheme = {
+            "A": colors.to_rgb("#00811C"),  # green
+            "C": colors.to_rgb("#2000C7"),  # blue
+            "G": colors.to_rgb("#FFB32C"),  # yeellow
+            "T": colors.to_rgb("#D00001"),
+        }  # red
+
+        crp_logo = logomaker.Logo(
+            tf_mut_score_plot, ax=ax_name, color_scheme=color_scheme, baseline_width=1
+        )
+
+    else:
+        crp_logo = logomaker.Logo(tf_mut_score_plot, ax=ax_name, baseline_width=1)
+
+    if highlight_position is not False:
+        crp_logo.highlight_position(p=highlight_position, color="gold", alpha=0.5)
+
+    crp_logo.style_spines(visible=False)
+    crp_logo.style_spines(spines=["left"], visible=True)
+    crp_logo.ax.set_ylabel(ylabel, labelpad=-1, fontsize=fontsize)
+
+    if max_lim is not False and min_lim is not False:
+        crp_logo.ax.set_ylim(min_lim, max_lim)
+
+    crp_logo.ax.set_xticks([])
+
+    return crp_logo
+
+
+def find_hits_and_make_logo(
+    matrix,
+    ax_name,
+    known_PFM,
+    cutoff=0.8,
+    colors_base=True,
+    best_motif_in_range=10,
+    known_ICM=False,
+    percentage=0.15,
+    multiple_one_hot=False,
+    hits=None,
+    fig=None,
+    split_pos_neg=False,
+):
+    """
+    Given attribution matrix find hits (similar ), and plot the original motifs.
+
+    Args:
+        matrix (np.array) Importance matrix of sequence
+        ax_name: matplotlib axis provide 2
+        colors_base (bool): If True use Vini's colors
+        cutoff (float): Cutoff to define similarity, default 0.8
+        known_PFM: (dict) dict of known PFM with name of PFM as keys
+        best_motif_in_range: (int) To avoid overlapping motifs, the best motif is found in within best_motif_in_range base pairs, default =10
+        known_ICM: (dict) Same as known_PFM but IC, if False just use known_PFM.
+        percentage (float): Only do the scanning of the motifs that attributions is at least 1-percentage the attribution of the max motif
+        multiple_one_hot (np.array): If not False, provide one-hot encoded sequence, and the scanning will be done with the normalized sequence*one_hot
+        hits: pre-computed hits df. If is None, will be computed here
+
+        split_pos_neg: (bool) If True, split the attribution between negative and positive values when searching for hits.
+
+    """
+
+    len_seq = matrix.shape[1]
+    # Find hits, creates dataframe
+
+    # Get the PFM to plot and compute
+    if known_ICM is not False:
+        plotting_known_motifs = known_ICM
+        normalize = False
+    else:
+        plotting_known_motifs = known_PFM
+        normalize = True
+
+    if hits is None:
+        hits = run_motif_scanning(
+            plotting_known_motifs,
+            matrix,
+            threshold=cutoff,
+            attribution=True,
+            multiple_one_hot=multiple_one_hot,
+            normalize=normalize,
+            split_pos_neg=split_pos_neg,
+        )
+        hits["att"] = hits["att"] / hits.sum_motif
+
+    hits["att_abs"] = np.abs(hits.att)
 
     # Create empty array and fill it with hits
-    relevant_hits_row1 = np.empty(attribution_shape)
-    # relevant_hits_row1[:,:] = 0
-    relevant_hits_row2 = np.empty(attribution_shape)
-    # relevant_hits_row2[:,:] = 0
+    relevant_hits_row1 = np.empty(matrix.shape)
+    relevant_hits_row1[:, :] = 0
+    relevant_hits_row2 = np.empty(matrix.shape)
+    relevant_hits_row2[:, :] = 0
 
     # Take only hits that their mean attribution is at least 10% of the letter wiht max attribution
-    hits = motif_scanning_results[
-        motif_scanning_results.att_x_PFM.abs()
-        > (motif_scanning_results.att_x_PFM.abs().max() * percentage)
-    ]
+
+    hits = hits[hits.att_x_PFM.abs() > (hits.att_x_PFM.abs().max() * percentage)]
+
     # Avoid overlapping hits
     hits["rho_abs"] = np.abs(hits.rho)
     hits = hits.sort_values("start")
     hits["mid_point"] = ((hits.end + hits.start) / 2).astype(int)
 
-    # Cut the promoters in bins based on the length of 10
-    bins = np.arange(0, length_sequence, 10)
+    # Cut the promoters in bins based on the length of best_motif_in_range
+    bins = np.arange(0, len_seq, best_motif_in_range)
     ind = np.digitize(hits.mid_point, bins)
     hits["bin"] = ind
 
-    # Get length of motifs
+    # We have to take somehow the length of the motif in the attribution sequence
+    ## we prefer to have a HOCOMOCO motifs that covers all the motif in the attribution score,
+    ##   instead of two that might have higher rho.
+
+    ###### Lenght max
     hits["len"] = hits.end - hits.start
+    # hits['len_max'] = hits.groupby(ind)['len'].transform(max)
+    # hits = hits[hits['len_max'] == hits['len']]
+
+    ###### Based on att*PFM
+    """def secndmax(x):
+        if len(x)==1:return(max(x)) 
+        x = list(x)
+        x.remove(max(x))
+        return(max(x))"""
 
     hits = (
         hits.groupby(ind)
         .apply(lambda x: x.nlargest(2, ["rho_abs"], keep="first"))
         .reset_index(drop=True)
     )
+
+    # hits['corr_max'] = hits.groupby(ind)['rho_abs'].transform(secndmax)
+
+    # hits = hits[hits['corr_max'] <= hits['rho_abs']]
+
+    ###### Rho max
+    # hits['rho_max'] = hits.groupby(ind)['rho_abs'].transform(max)
+    # hits = hits[hits['rho_max'] == hits['rho_abs']]
+
+    ###### Based on attribution
+    # hits['att_max'] = hits.groupby(ind)['att'].transform(max)
+    # hits = hits[hits['att'] == hits['att_max']]
+
     previous_start, previous_end = -10, -10
+
     hits = hits.sort_values(["bin", "rho_abs"], ascending=False)
 
     if hits.empty:  # If no hits, delete axis
-        fig.delaxes(ax[0])
-        fig.delaxes(ax[1])
+        fig.delaxes(ax_name[0])
+        fig.delaxes(ax_name[1])
         return None
 
-    # Now get which motifs will be plot
+    ##add selected hits
     hits_to_plot_row1, hits_to_plot_row2 = [], []
-    for _, motif in hits.iterrows():
+
+    for it_rows, motif in hits.iterrows():
+
         start_motif, end_motif = motif[2], motif[3]
+
         overlap = max(
             0, min(end_motif, previous_end) - max(start_motif, previous_start)
         )
+
         # If the start of the motif it's a bit shifted we need to make the known motif a bit shorter s well
 
-        if end_motif > length_sequence:
-            end_motif = length_sequence
-            rel_end = length_sequence - start_motif
+        if end_motif > len_seq:
+            end_motif = len_seq
+            rel_end = len_seq - start_motif
+
         else:
             rel_end = end_motif - start_motif
 
         if start_motif < 0:
             rel_start = -start_motif
             start_motif = 0
+
         else:
             rel_start = 0
 
         if overlap == 0 or (overlap > 0 and previous_overlap > 0):
-            relevant_hits_row1[:, start_motif:end_motif] = motifs_ICT[motif[0]][
-                :, rel_start:rel_end
-            ]
+            relevant_hits_row1[:, start_motif:end_motif] = plotting_known_motifs[
+                motif[0]
+            ][:, rel_start:rel_end]
             hits_to_plot_row1.append(motif)
         else:
-            relevant_hits_row2[:, start_motif:end_motif] = motifs_ICT[motif[0]][
-                :, rel_start:rel_end
-            ]
+            relevant_hits_row2[:, start_motif:end_motif] = plotting_known_motifs[
+                motif[0]
+            ][:, rel_start:rel_end]
             hits_to_plot_row2.append(motif)
 
         previous_start, previous_end, previous_overlap = start_motif, end_motif, overlap
 
     # Do the same for both axis
-    for it, sub_ax in enumerate(ax):
+    for it, sub_ax in enumerate(ax_name):
 
         if it == 0:
             relevant_hits = relevant_hits_row1
@@ -807,16 +1494,24 @@ def plot_scanned_motifs(attribution, ax, motif_scanning_results, motifs_ICT, fig
         tf_mut_score_plot = pd.DataFrame(
             np.transpose(relevant_hits), columns=["A", "C", "G", "T"]
         )
-        color_scheme = {
-            "A": colors.to_rgb("#00811C"),  # green
-            "C": colors.to_rgb("#2000C7"),  # blue
-            "G": colors.to_rgb("#FFB32C"),  # yeellow
-            "T": colors.to_rgb("#D00001"),
-        }  # red
 
-        crp_logo = logomaker.Logo(
-            tf_mut_score_plot, ax=sub_ax, color_scheme=color_scheme, baseline_width=0
-        )
+        if colors_base:
+            color_scheme = {
+                "A": colors.to_rgb("#00811C"),  # green
+                "C": colors.to_rgb("#2000C7"),  # blue
+                "G": colors.to_rgb("#FFB32C"),  # yeellow
+                "T": colors.to_rgb("#D00001"),
+            }  # red
+
+            crp_logo = logomaker.Logo(
+                tf_mut_score_plot,
+                ax=sub_ax,
+                color_scheme=color_scheme,
+                baseline_width=0,
+            )
+
+        else:
+            crp_logo = logomaker.Logo(tf_mut_score_plot, ax=sub_ax, baseline_width=0)
 
         for selected_hit in hits_to_plot:
 
@@ -839,3 +1534,469 @@ def plot_scanned_motifs(attribution, ax, motif_scanning_results, motifs_ICT, fig
         crp_logo.ax.set_ylim((-0.6, crp_logo.ax.get_ylim()[1]))
 
     return crp_logo
+
+
+# function to save the effect of every possible mutations
+def create_dataframe_mutation_effect(
+    name,
+    strand,
+    model,
+    output_directory,
+    PFM_hocomoco_dict,
+    L_max,
+    reverse=False,
+    seq=False,
+    type_motif_scanning="PCC",
+    compute_sequence_hits=False,
+):
+    """
+    Return a dataframe with the effect of each mutation.
+    Args:
+            model: pytorch model
+            promoters: (pd.Series) pandas series that contains chr, start, end, strand for each promoter
+            output_directory: (str) Output directory to save all hits and mutagenesis dataframe.
+            L_max: (int) Length max. of the model
+            PFM_hocomoco_dict: (dict) Dictionary PFM or IC for motifs of interest
+            compute_sequence_hits: (bool)  If True, the hits for the sequence are also computed.
+            reverse: (bool) If True, compute also for reverse attribution and do the mean with the forward
+            seq: (str) If seq is given, not compute sequence from genome.
+            type_motif_scanning: (str) Either 'PCC' or 'conv_scanning'
+    """
+
+    if type_motif_scanning != "PCC" and type_motif_scanning != "conv_scanning":
+        raise ValueError(
+            f'Type of motif scanning should be either "PCC" or "conv_scanning", but you selected {type_motif_scanning}'
+        )
+    # Create folder if it doesn't exist
+
+    folder_output = os.path.join(output_directory, f"{name}")
+
+    if not os.path.exists(folder_output):
+        os.makedirs(
+            folder_output
+        )  # Create subdirectory with the name of the promoter in the output folder
+
+    file_hits = os.path.join(folder_output, f"hits_{name}.txt.gz")
+    file_hits_seq = os.path.join(folder_output, f"hits_SEQUENCE_{name}.txt.gz")
+
+    # Mutagenesis file
+    file_mutagenesis = os.path.join(folder_output, f"mutagenesis_{name}.txt.gz")
+
+    promoter_importance_base = pd.DataFrame()
+
+    if not os.path.exists(file_mutagenesis):
+
+        att_all, _ = compute_attribution(
+            seq=seq, L_max=L_max, start_motif=0, end_motif=len(seq), completemodel=model
+        )
+        att_all = att_all
+
+        if reverse:
+            # If reverse use the same sequence but complementary and compute attributions
+            reverse_DNA = "".maketrans("ACGT", "TGCA")
+            rev_seq = seq.translate(reverse_DNA)[::-1]
+
+            att_all_rev, _ = compute_attribution(
+                seq=rev_seq,
+                L_max=L_max,
+                start_motif=0,
+                end_motif=len(seq),
+                completemodel=model,
+            )
+
+            att_all_rev = att_all_rev.cpu().numpy()
+
+            att_all = np.mean(
+                np.stack([att_all, np.flip(att_all_rev, (0, 1))], axis=0), axis=0
+            )
+
+        start = 1
+        end = len(seq)
+        start_end = list(range(start, end))
+
+        if np.all(strand == "-"):
+            start_end = list(range(end, start, -1))
+
+        if np.all(strand == "+"):
+            start_end = list(range(start, end))
+
+        promoter_importance_base_single = pd.DataFrame(
+            {
+                "Ref": list(seq),
+                "A": att_all[0, :],
+                "C": att_all[1, :],
+                "G": att_all[2, :],
+                "T": att_all[3, :],
+            }
+        )
+
+        promoter_importance_base = pd.concat(
+            [promoter_importance_base, promoter_importance_base_single]
+        )
+
+        promoter_importance_base.to_csv(
+            file_mutagenesis,
+            index=False,
+            sep="\t",
+            compression={"method": "gzip", "compresslevel": 5},
+        )
+
+    else:
+        try:
+            promoter_importance_base = pd.read_csv(file_mutagenesis, sep="\t")
+        except:
+            promoter_importance_base = pd.read_csv(
+                file_mutagenesis, sep="\t", compression="gzip"
+            )
+
+    # Now compute hits
+
+    # now compute the average importance for each nucleotide in the reference sequnece
+
+    onehot_seq = get_one_hot(["".join(seq)], L_max=len(seq))[0]
+
+    plot_promoter = promoter_importance_base[["A", "C", "G", "T"]]
+
+    vector_importance = plot_promoter.mean(axis=1)
+    attribution_real = np.transpose(onehot_seq * np.expand_dims(vector_importance, 1))
+
+    if type_motif_scanning == "PCC":
+
+        hits = run_motif_scanning(
+            PFM_hocomoco_dict,
+            attribution_real,
+            append=True,
+            cutoff_att=0.001,
+            attribution=True,
+        )
+
+        # HITS ON ONLY SEQUENCE, NOT ATTRIBUTION MATRIX
+        if compute_sequence_hits:
+            hits_sequence = run_motif_scanning(
+                PFM_hocomoco_dict,
+                np.transpose(onehot_seq),
+                append=True,
+                cutoff_att=0.001,
+            )
+
+    else:
+        hits = conv_with_PFM_slide_through_attribution(
+            PFM_hocomoco_dict, attribution_real, multiple_one_hot=False, normalize=False
+        )
+
+        # HITS ON ONLY SEQUENCE, NOT ATTRIBUTION MATRIX
+        if compute_sequence_hits:
+            hits_sequence = conv_with_PFM_slide_through_attribution(
+                PFM_hocomoco_dict,
+                np.transpose(onehot_seq),
+                multiple_one_hot=False,
+                normalize=False,
+                sequence=True,
+            )
+
+    hits.to_csv(
+        file_hits,
+        index=False,
+        sep="\t",
+        compression={"method": "gzip", "compresslevel": 5},
+    )
+
+    if compute_sequence_hits:
+        hits_sequence.to_csv(
+            file_hits_seq,
+            index=False,
+            sep="\t",
+            compression={"method": "gzip", "compresslevel": 5},
+        )
+
+
+def get_hocomoco_hits(
+    promoter_importance_base,
+    seq,
+    hocomoco_jaspar,
+    folder_output,
+    output_suffix,
+    normalization=False,
+    split_pos_neg=False,
+):
+    """
+    Scan the hocomoco database for correlation with both the sequence and the model's attribution
+    split_pos_neg: (bool) If True, split the attribution between negative and positive values.
+    """
+
+    # Now compute hits
+
+    # now compute the average importance for each nucleotide in the reference sequnece
+
+    onehot_seq = get_one_hot(["".join(seq)], L_max=len(seq))[0]
+    plot_promoter = promoter_importance_base[["A", "C", "G", "T"]]
+
+    vector_importance = plot_promoter.mean(axis=1)
+    attribution_real = np.transpose(onehot_seq * np.expand_dims(vector_importance, 1))
+
+    hits = run_motif_scanning(
+        hocomoco_jaspar,
+        attribution_real,
+        normalization=normalization,
+        threshold=0.7,
+        attribution=True,
+        multiple_one_hot=False,
+        split_pos_neg=split_pos_neg,
+    )
+
+    # HITS ON ONLY SEQUENCE, NOT ATTRIBUTION MATRIX
+    hits_sequence = run_motif_scanning(
+        hocomoco_jaspar,
+        np.transpose(onehot_seq),
+        normalization=normalization,
+        threshold=0.7,
+        attribution=True,
+        multiple_one_hot=False,
+    )
+
+    hits.to_csv(
+        os.path.join(folder_output, "hits_" + output_suffix),
+        index=False,
+        sep="\t",
+        compression={"method": "gzip", "compresslevel": 5},
+    )
+
+    hits_sequence.to_csv(
+        os.path.join(folder_output, "hits_SEQUENCE_" + output_suffix),
+        index=False,
+        sep="\t",
+        compression={"method": "gzip", "compresslevel": 5},
+    )
+    return (hits, hits_sequence)
+
+def plot_mutagenesis(mutagenesis_df, seq, TSS_position=0, PFM_hocomoco_dict=False, 
+                     ICT_hocomoco_dict=False, output_file=False, 
+                     promoter_name='', return_fig=False, cutoff=0.7, title='',
+                     hits=None, model=None):
+    """
+    Args:
+        mutagenesis_df (pd.DataFrame) It should be a dataframe with columns called "pos" (= position in the genome), 'A', 'C', 'G', 'T' --> These columns indicate the effect of the mutation in terms of REF-ALT
+
+        seq: (str) String containg the sequence of the fragment, should be same length as dataframe.
+
+        promoter_name: (str) Name of the promoter or region studied --> Used in the title 
+        chr: (str) Chromosome used e.g. chr2 --> Just used to add information in x-axis
+        strand: (str) Either '-' or '+' 
+        title: (str) If necessary, add extra information to add in the title.
+
+        PFM_hocomoco_dict: (dict) PFM dictionary to do motif scanning
+        ICT_hocomoco_dict: (dict) ICT dictionary to do motif scanning
+
+        output_file: (str) If not False, name of the figure file to be saved. Extension determines the type of figure.
+
+        TSS_position: (int) Position of the TSS, in this way the x-axis will be relative position, and the TSS will be highlited.
+        return_fig: (bool) If not False, it will return the fig object of matplotlib instead of plotting or saving plot. 
+
+        cutoff: (float) PCC cutoff to do motif scanning similarity (default 0.3).
+
+    """
+
+    ##IF not provided, just load  them
+    if PFM_hocomoco_dict is False or ICT_hocomoco_dict is False: PFM_hocomoco_dict, _, ICT_hocomoco_dict = dict_jaspar(reverse=True)
+    pos = pd.Series(list(range(len(seq))))
+    strand = '+'
+    if strand == '-': relative = pos - TSS_position
+    elif strand == '+': relative = -(pos - TSS_position)
+    else: print(f' Strand value neither + or -, instead value {strand} provided. Please correct this.')
+
+    mutagenesis_df['rel'] = relative
+
+    plot_promoter = mutagenesis_df[['A', 'C', 'G','T']]
+
+    if TSS_position != 0:  highlight_position = int(np.where(relative==0)[0][0])
+    else: highlight_position= False
+
+    
+    #The x-labels will be the relative position and the absolute 
+    if TSS_position != 0: plot_promoter.index =  relative.astype(str) + '\n'+ mutagenesis_df.pos.astype(str)
+    else: plot_promoter.index =  relative.astype(str) 
+
+    onehot_seq = get_one_hot([''.join(seq)], L_max = len(seq))[0]
+
+    
+    fig, ax = plt.subplots(figsize= (40, 7), nrows=6, ncols=2, gridspec_kw={'height_ratios': [1, 3,4,1,1,1], 'width_ratios':[50,1]})
+    plt.subplots_adjust(wspace=0.001)
+    fig.delaxes(ax[3,0])
+    
+    fig.delaxes(ax[0,1])
+    fig.delaxes(ax[1,1])
+    fig.delaxes(ax[2,1])
+    fig.delaxes(ax[3,1])
+    fig.delaxes(ax[4,1])
+    fig.delaxes(ax[5,1])
+    
+
+    ############ First row plot is the DNA sequence
+
+    ##Add arrow where TSS is
+    if TSS_position != 0: 
+        ax[0,0].annotate("", xy=(highlight_position+4, 2), xytext=(highlight_position, 1), 
+                         arrowprops=dict(arrowstyle="->", linewidth=1, connectionstyle="angle,angleA=90,angleB=180,rad=0"), annotation_clip=False)
+        #ax[0,0].annotate("", xy=(highlight_position, 1), xytext=(highlight_position, 2), arrowprops=dict(arrowstyle="-", linewidth=1), annotation_clip=False)
+        
+    print("Plotting reference sequence", flush=True)
+    plot_logo(np.transpose(onehot_seq), ax_name = ax[0,0], ylabel = '', colors_base=True,
+                               highlight_position=highlight_position)
+    # Add prediction in the tittle
+    pred = predict_fragments(seq, 600, model)
+    title = f'{title} \nPredicted wildtype activity: {pred:.4f}'
+    ax[0,0].set_title(f'{promoter_name}  {title}', fontsize='large')
+    # remove y-axis info from this row
+    ax[0,0].yaxis.set_tick_params(labelleft=False)
+    ax[0,0].set_yticks([])
+
+
+    ########### Third row plot is the heatmap 
+    print("Plotting heatmap", flush=True)
+
+    #In case there are NaNs
+    mask = plot_promoter.T.isnull()
+    max_abs_value = plot_promoter.abs().max().max()
+    g = sns.heatmap(plot_promoter.T, ax=ax[2,0],  cmap="RdBu", center=0, xticklabels=10, 
+                        cbar=False, mask=mask, vmin=(-max_abs_value), vmax=max_abs_value)   
+
+    ax[2,0].set_ylabel(f'')
+    ax[2,0].set_xlabel(f"Position (bp)")
+
+    #now compute the average importance for each nucleotide in the reference sequnece
+    vector_importance = plot_promoter.mean(axis=1, skipna=True)   
+    #If any nt is NaN, it's because all the measurements where NaN, in that case we fill it with 0
+    #if vector_importance.isna().any(): vector_importance = vector_importance.fillna(0) 
+    
+    attribution_real = np.transpose(onehot_seq*np.expand_dims(vector_importance, 1))
+
+    ########### 4th and 5th row plots the hits (similar to known motifs)
+    #Plot the best matches with known PFM
+    print("Plotting HOCOMOCO motifs", flush=True)
+    find_hits_and_make_logo(attribution_real, [ax[4,0],ax[5,0]], PFM_hocomoco_dict, cutoff=cutoff, best_motif_in_range=15, known_ICM=ICT_hocomoco_dict, fig=fig, hits=hits)
+
+    ###########  2nd row is the variant effect
+    plot_logo(attribution_real, ax_name = ax[1,0], ylabel = 'Variant effect\n(REF-mean(ALT))', 
+                               colors_base=True, highlight_position=highlight_position)
+
+    fig.colorbar(ax[2,0].get_children()[0], ax=ax[2,1], orientation="vertical", fraction=0.5, label= 'Variant effect\n(REF-ALT)')
+
+
+    #If you want return the axis and fig
+    if return_fig == True: return(fig, ax)
+
+    if output_file is False: plt.show()
+    else: plt.savefig(output_file, bbox_inches="tight")
+
+
+def predict_SuRE_and_correlation(
+    model, PFM_dict, consensus_dict, L_max, random_sequences
+):
+    """
+    This function will place a motif in the middle of the sequence compute the SuRE score,
+     and correlation with a known PFM.
+
+     Args:
+        model
+        PFM_dict: (dit) PFM names as keys and PFM as values
+        consensus_dict: (dict) Motif names as keys and consensus sequences as values
+        L_max: (int) Length max accepted by model
+        random_sequences: (list) List of random sequences to use.
+
+    Returns:
+        pred_motifs: (pd.K562_prom_enhframe) For Each motif contains information: 'pred_sure', 'zscore', 'mean_rnd', 'std_rnd', 'rho_pcc'
+    """
+    import time
+
+    # Loop through random sequences and computes their SuRE score, create a dictionary for that
+    ## use later to compute the zscores
+    back_seq_predictions = {}
+    for seq in random_sequences:
+        X = torch.Tensor(np.float32(get_one_hot([seq], L_max))).permute(0, 2, 1)
+
+        if torch.cuda.is_available():
+            X = X.cuda()
+
+        with torch.no_grad():
+            sure_score = model(X).item()
+
+        back_seq_predictions[seq] = sure_score
+
+    mean_bck = np.mean(list(back_seq_predictions.values()))
+    std_bck = np.std(list(back_seq_predictions.values()))
+
+    # Iterate through motifs
+
+    pred_motif = []
+
+    # Loop through all motifs
+    for it, motif in enumerate(PFM_dict.keys()):
+        if it % 55 == 0:
+            print(f" Iteration {it}/{len(PFM_dict.keys())}", flush=True)
+
+        # Get consensus sequence
+        cons = consensus_dict[motif]
+
+        # Create empty array and update it for each random sequence
+        att_rnd_seqs = np.empty((4, len(cons)))
+        scores_normalized, scores_raw = [], []
+
+        ##Loop through all sequences
+        t = time.time()
+        for i_seq, rand_seq in enumerate(random_sequences):
+
+            seq = list(rand_seq)
+
+            # Place the consensus sequence in the middle of  the random/backgorund sequence
+            half_seq = int(len(seq) / 2 - len(cons) / 2)
+            seq[half_seq : (half_seq + len(cons))] = cons
+            seq = "".join(seq)
+
+            att_all = (
+                motif_attribution(
+                    seq=seq,
+                    L_max=L_max,
+                    start_motif=half_seq,
+                    end_motif=(half_seq + len(cons)),
+                    completemodel=model,
+                )
+                .cpu()
+                .numpy()
+            )
+
+            att_rnd_seqs += att_all
+
+            ##Now compute SuRE score
+
+            X = torch.Tensor(np.float32(get_one_hot([seq], L_max))).permute(0, 2, 1)
+
+            if torch.cuda.is_available():
+                X = X.cuda()
+
+            with torch.no_grad():
+                sure_score = model(X).item()
+
+            # Now substract the sure score of that background sequence
+            scores_normalized.append(sure_score - back_seq_predictions[rand_seq])
+            scores_raw.append(sure_score)
+
+        sure_score_normalized_background = np.mean(scores_normalized)
+        zscore = (np.mean(scores_raw) - mean_bck) / std_bck
+
+        # Loop through random sequences is done
+        att_rnd_seqs /= i_seq + 1
+
+        hits = compute_correlation_between_motifs(
+            pfm=PFM_dict[motif], motif_attribution=att_rnd_seqs
+        )
+
+        pred_motif.append(
+            [motif, sure_score_normalized_background, zscore, mean_bck, std_bck, hits]
+        )
+
+    pred_motifs = pd.DataFrame(
+        pred_motif,
+        columns=["motif", "pred_sure", "zscore", "mean_rnd", "std_rnd", "rho_pcc"],
+    )
+
+    return pred_motifs

@@ -15,57 +15,11 @@ If not, see <http://www.gnu.org/licenses/>.
 import argparse
 from rrwick_help_formatter import MyParser, MyHelpFormatter
 from PARM_predict import PARM_predict
-from PARM_mutagenesis import PARM_mutagenesis
+from PARM_mutagenesis import PARM_mutagenesis, PARM_plot_mutagenesis
 import warnings
 warnings.filterwarnings("ignore")
 
 __version__ = "0.1.0"
-
-
-def train(args):
-    # Implement the logic for the train command here
-    print(f"Training with data from {args.data_file} for {args.epochs} epochs")
-
-
-def predict(args):
-    # Implement the logic for the predict command here
-    print(description)
-    print("=" * 80)
-    print("{: ^80}".format("Predict"))
-    print("-" * 80)
-    models = ",".join(args.model)
-    print("Model: {: >73}".format(models))
-    print("Input:{: >74}".format(args.input))
-    print("Output:{: >73}".format(args.output))
-    # Same but now filling the output with spaces so it gets 80 characters
-    print("=" * 80)
-    PARM_predict(
-        input=args.input,
-        model_weights=args.model,
-        output=args.output,
-        parm_version=__version__,
-    )
-
-
-def mutagenesis(args):
-    # Implement the logi for the mutagenesis command here
-    print(description)
-    print("=" * 80)
-    print("{: ^80}".format("Predict"))
-    print("-" * 80)
-    models = ",".join(args.model)
-    print("Model: {: >73}".format(models))
-    print("Input:{: >74}".format(args.input))
-    print("Output:{: >73}".format(args.output))
-    # Same but now filling the output with spaces so it gets 80 characters
-    print("=" * 80)
-    PARM_mutagenesis(
-        input=args.input,
-        model_weights=args.model,
-        output_directory=args.output,
-        motif_database=args.motif_database,
-        parm_version=__version__,
-    )
 
 
 def main():
@@ -139,6 +93,78 @@ def main():
         exit(1)
 
 
+def train(args):
+    # Implement the logic for the train command here
+    print(f"Training with data from {args.data_file} for {args.epochs} epochs")
+
+
+def predict(args):
+    # Implement the logic for the predict command here
+    print(description)
+    print("=" * 80)
+    print("{: ^80}".format("Predict"))
+    print("-" * 80)
+    models = ",".join(args.model)
+    print("Model: {: >73}".format(models))
+    print("Input:{: >74}".format(args.input))
+    print("Output:{: >73}".format(args.output))
+    # Same but now filling the output with spaces so it gets 80 characters
+    print("=" * 80)
+    PARM_predict(
+        input=args.input,
+        model_weights=args.model,
+        output=args.output,
+        parm_version=__version__,
+    )
+
+
+def mutagenesis(args):
+    # Implement the logi for the mutagenesis command here
+    print(description)
+    print("=" * 80)
+    print("{: ^80}".format("Mutagenesis"))
+    print("-" * 80)
+    models = ",".join(args.model)
+    print("Model: {: >73}".format(models))
+    print("Input:{: >74}".format(args.input))
+    print("Output:{: >73}".format(args.output))
+    # Same but now filling the output with spaces so it gets 80 characters
+    print("=" * 80)
+    PARM_mutagenesis(
+        input=args.input,
+        model_weights=args.model,
+        output_directory=args.output,
+        motif_database=args.motif_database,
+        parm_version=__version__,
+    )
+
+
+def plot(args):
+    print(description)
+    print("=" * 80)
+    print("{: ^80}".format("Plot"))
+    print("-" * 80)
+    if args.output is None:
+        out = args.input
+    else: 
+        out = args.output
+    print("Input:{: >74}".format(args.input))
+    print("Output:{: >73}".format(out))
+    print("Correlation threshold:{: >58}".format(args.correlation_threshold))
+    print("Attribution threshold:{: >58}".format(args.attribution_threshold))
+    print("Plot format:{: >68}".format(args.plot_format))
+    # Same but now filling the output with spaces so it gets 80 characters
+    print("=" * 80)
+    PARM_plot_mutagenesis(
+        input=args.input,
+        output_directory=args.output,
+        correlation_threshold=args.correlation_threshold,
+        attribution_threshold=args.attribution_threshold,
+        plot_format=args.plot_format,
+        parm_version=__version__,
+    )
+
+# Predict task ===================================================================
 def predict_subparser(subparsers):
 
     group = subparsers.add_parser(
@@ -243,6 +269,7 @@ def mutagenesis_subparser(subparsers):
 
     group.set_defaults(func=mutagenesis)
 
+# Plot task ===================================================================
 def plot_subparser(subparsers):
     group = subparsers.add_parser(
         "plot",
@@ -251,6 +278,60 @@ def plot_subparser(subparsers):
         formatter_class=MyHelpFormatter,
         add_help=False,
     )
+    
+    required_args = group.add_argument_group("Required arguments")
+
+    required_args.add_argument(
+        "--input",
+        help="Path to the directory containing the `mutagenesis_[ID].txt.gz` and "
+        "`hits_[ID].txt.gz` files generated by PARM mutagenesis. PARM assumes that "
+        "the ID values are the same for each sequence, otherwise an error will be raised.",
+    )
+    optional_arguments = group.add_argument_group("Optional arguments")
+    
+    optional_arguments.add_argument(
+        "--output",
+        help="Path to the directory where the files will be stored. Default "
+        "behaviour is to save the PDFs in the same directory as the input data.",
+    )
+    optional_arguments.add_argument(
+        "--correlation_threshold",
+        default=0.75,
+        help="The minimum value of Pearson correlation that a scanned motif needs "
+        "to present in order to be shown in the plot (Default: 0.75).",
+    )
+    optional_arguments.add_argument(
+        "--attribution_threshold",
+        default=0.001,
+        help="The minimum value of attribution (i.e., the mean attribution score "
+        "for the bases of a motif) that a scanned motif needs to present in order "
+        "to be shown in the plot (Default: 0.001).",
+    )
+    optional_arguments.add_argument(
+        "--plot_format",
+        default='pdf',
+        choices = ['pdf', 'svg', 'jpg', 'png'],
+        help="Which format should the plots be saved? Available formats are "
+        "pdf, svg, jpg, and png. (Default: pdf).",
+    )
+
+    # 
+    other_args = group.add_argument_group("Other")
+    other_args.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        default=argparse.SUPPRESS,
+        help="Show this help message and exit",
+    )
+    other_args.add_argument(
+        "--version",
+        action="version",
+        version="PARM v" + __version__,
+        help="Show program's version number and exit",
+    )
+    
+    group.set_defaults(func=plot)
 
 
 def bye_message():

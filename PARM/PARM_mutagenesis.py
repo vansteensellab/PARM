@@ -25,6 +25,7 @@ from tqdm import tqdm
 from matplotlib import pyplot as plt, colors
 import logomaker
 import seaborn as sns
+from pathlib import Path
 
 
 def PARM_mutagenesis(
@@ -53,7 +54,6 @@ def PARM_mutagenesis(
         complete_models[model_name] = load_PARM(model)
         parm_scores[model_name] = dict()
 
-    
     # ====================================================================================
     # Parsing the fasta file =============================================================
     # ====================================================================================
@@ -64,10 +64,14 @@ def PARM_mutagenesis(
         sequence_ID = record.id
         sequence = str(record.seq).upper()
         for model_name, model in complete_models.items():
-            mutagenesis_data = os.path.join(output_directory, sequence_ID, 'mutagenesis_'+sequence_ID+'.txt.gz')
+            mutagenesis_data = os.path.join(
+                output_directory, sequence_ID, "mutagenesis_" + sequence_ID + ".txt.gz"
+            )
             if os.path.exists(mutagenesis_data):
-                PARM_misc.log(f"WARNING: mutagenesis data for {sequence_ID} already exist. Skipping...",
-                              parm_version)
+                PARM_misc.log(
+                    f"WARNING: mutagenesis data for {sequence_ID} already exist. Skipping...",
+                    parm_version,
+                )
             else:
                 create_dataframe_mutation_effect(
                     name=sequence_ID,
@@ -175,7 +179,9 @@ def predict_fragments(seq, L_max, completemodel):
     if torch.cuda.is_available():
         completemodel = completemodel.cuda()
 
-    onehot_fragment = torch.tensor(np.float32(get_one_hot([seq], L_max))).permute(0, 2, 1)
+    onehot_fragment = torch.tensor(np.float32(get_one_hot([seq], L_max))).permute(
+        0, 2, 1
+    )
     if torch.cuda.is_available():
         onehot_fragment = onehot_fragment.cuda()
 
@@ -739,6 +745,7 @@ def compute_correlation_between_motifs(
     else:
         return (rho_prob, p_mut_prob, rho_ICM, p_mut_IC)
 
+
 def run_motif_scanning(
     known_PFM,
     attribution_seq,
@@ -1265,6 +1272,62 @@ def conv_with_PFM_slide_through_attribution(
     return hits
 
 
+# ==============================================================================
+# Plotting =====================================================================
+# ==============================================================================
+def PARM_plot_mutagenesis(
+    input: os.path,
+    correlation_threshold: float,
+    attribution_threshold: float,
+    plot_format: str,
+    parm_version: str,
+    output_directory: os.path = None,
+):
+    PARM_misc.log("Reading input directory", parm_version)
+    input_directory = Path(input)
+    plot_extension = "." + plot_format
+    total_input_files = len(['_' for _ in input_directory.rglob("mutagenesis_*.txt.gz")])
+    PARM_misc.log("Plotting data", parm_version)
+    pbar = tqdm(total=total_input_files, ncols=80)
+    for this_file in input_directory.rglob("mutagenesis_*.txt.gz"):
+        file_name = this_file.name
+        file_parent_directory = this_file.parent
+        file_hits = os.path.join(
+            file_parent_directory, file_name.replace("mutagenesis_", "hits_")
+        )
+        # Define output file
+        if output_directory is None:
+            output_file = os.path.join(
+                file_parent_directory,
+                file_name.replace("mutagenesis_", "")
+                + file_name.replace(".txt.gz", plot_extension),
+            )
+        else:
+            output_file = os.path.join(
+                output_directory,
+                file_name.replace("mutagenesis_", "")
+                + file_name.replace(".txt.gz", plot_extension),
+            )
+        # Reading input
+        mutagenesis_data = pd.read_csv(this_file, compression="gzip", sep="\t")
+        sequence = "".join(mutagenesis_data.Ref)
+        hits_data = pd.read_csv(file_hits, compression="gzip", sep="\t")
+        # Apply filters
+        hits_data = hits_data.loc[abs(hits_data.rho) >= correlation_threshold]
+        hits_data = hits_data.loc[abs(hits_data.att) >= attribution_threshold]
+        plot_mutagenesis(
+            mutagenesis_df=mutagenesis_data,
+            seq=sequence,
+            TSS_position=0,
+            cutoff=0,
+            return_fig=False,
+            title="",
+            hits=hits_data,
+            output_file=output_file,
+        )
+        pbar.update(1)
+
+
 def plot_logo(
     matrix,
     ax_name,
@@ -1710,78 +1773,29 @@ def create_dataframe_mutation_effect(
         )
 
 
-def get_hocomoco_hits(
-    promoter_importance_base,
+def plot_mutagenesis(
+    mutagenesis_df,
     seq,
-    hocomoco_jaspar,
-    folder_output,
-    output_suffix,
-    normalization=False,
-    split_pos_neg=False,
+    TSS_position=0,
+    PFM_hocomoco_dict=False,
+    ICT_hocomoco_dict=False,
+    output_file=False,
+    promoter_name="",
+    return_fig=False,
+    cutoff=0.7,
+    title="",
+    hits=None,
+    model=None,
 ):
-    """
-    Scan the hocomoco database for correlation with both the sequence and the model's attribution
-    split_pos_neg: (bool) If True, split the attribution between negative and positive values.
-    """
-
-    # Now compute hits
-
-    # now compute the average importance for each nucleotide in the reference sequnece
-
-    onehot_seq = get_one_hot(["".join(seq)], L_max=len(seq))[0]
-    plot_promoter = promoter_importance_base[["A", "C", "G", "T"]]
-
-    vector_importance = plot_promoter.mean(axis=1)
-    attribution_real = np.transpose(onehot_seq * np.expand_dims(vector_importance, 1))
-
-    hits = run_motif_scanning(
-        hocomoco_jaspar,
-        attribution_real,
-        normalization=normalization,
-        threshold=0.7,
-        attribution=True,
-        multiple_one_hot=False,
-        split_pos_neg=split_pos_neg,
-    )
-
-    # HITS ON ONLY SEQUENCE, NOT ATTRIBUTION MATRIX
-    hits_sequence = run_motif_scanning(
-        hocomoco_jaspar,
-        np.transpose(onehot_seq),
-        normalization=normalization,
-        threshold=0.7,
-        attribution=True,
-        multiple_one_hot=False,
-    )
-
-    hits.to_csv(
-        os.path.join(folder_output, "hits_" + output_suffix),
-        index=False,
-        sep="\t",
-        compression={"method": "gzip", "compresslevel": 5},
-    )
-
-    hits_sequence.to_csv(
-        os.path.join(folder_output, "hits_SEQUENCE_" + output_suffix),
-        index=False,
-        sep="\t",
-        compression={"method": "gzip", "compresslevel": 5},
-    )
-    return (hits, hits_sequence)
-
-def plot_mutagenesis(mutagenesis_df, seq, TSS_position=0, PFM_hocomoco_dict=False, 
-                     ICT_hocomoco_dict=False, output_file=False, 
-                     promoter_name='', return_fig=False, cutoff=0.7, title='',
-                     hits=None, model=None):
     """
     Args:
         mutagenesis_df (pd.DataFrame) It should be a dataframe with columns called "pos" (= position in the genome), 'A', 'C', 'G', 'T' --> These columns indicate the effect of the mutation in terms of REF-ALT
 
         seq: (str) String containg the sequence of the fragment, should be same length as dataframe.
 
-        promoter_name: (str) Name of the promoter or region studied --> Used in the title 
+        promoter_name: (str) Name of the promoter or region studied --> Used in the title
         chr: (str) Chromosome used e.g. chr2 --> Just used to add information in x-axis
-        strand: (str) Either '-' or '+' 
+        strand: (str) Either '-' or '+'
         title: (str) If necessary, add extra information to add in the title.
 
         PFM_hocomoco_dict: (dict) PFM dictionary to do motif scanning
@@ -1790,213 +1804,155 @@ def plot_mutagenesis(mutagenesis_df, seq, TSS_position=0, PFM_hocomoco_dict=Fals
         output_file: (str) If not False, name of the figure file to be saved. Extension determines the type of figure.
 
         TSS_position: (int) Position of the TSS, in this way the x-axis will be relative position, and the TSS will be highlited.
-        return_fig: (bool) If not False, it will return the fig object of matplotlib instead of plotting or saving plot. 
+        return_fig: (bool) If not False, it will return the fig object of matplotlib instead of plotting or saving plot.
 
         cutoff: (float) PCC cutoff to do motif scanning similarity (default 0.3).
 
     """
 
     ##IF not provided, just load  them
-    if PFM_hocomoco_dict is False or ICT_hocomoco_dict is False: PFM_hocomoco_dict, _, ICT_hocomoco_dict = dict_jaspar(reverse=True)
+    if PFM_hocomoco_dict is False or ICT_hocomoco_dict is False:
+        PFM_hocomoco_dict, _, ICT_hocomoco_dict = dict_jaspar(reverse=True)
     pos = pd.Series(list(range(len(seq))))
-    strand = '+'
-    if strand == '-': relative = pos - TSS_position
-    elif strand == '+': relative = -(pos - TSS_position)
-    else: print(f' Strand value neither + or -, instead value {strand} provided. Please correct this.')
+    strand = "+"
+    if strand == "-":
+        relative = pos - TSS_position
+    elif strand == "+":
+        relative = -(pos - TSS_position)
+    else:
+        print(
+            f" Strand value neither + or -, instead value {strand} provided. Please correct this."
+        )
 
-    mutagenesis_df['rel'] = relative
+    mutagenesis_df["rel"] = relative
 
-    plot_promoter = mutagenesis_df[['A', 'C', 'G','T']]
+    plot_promoter = mutagenesis_df[["A", "C", "G", "T"]]
 
-    if TSS_position != 0:  highlight_position = int(np.where(relative==0)[0][0])
-    else: highlight_position= False
+    if TSS_position != 0:
+        highlight_position = int(np.where(relative == 0)[0][0])
+    else:
+        highlight_position = False
 
-    
-    #The x-labels will be the relative position and the absolute 
-    if TSS_position != 0: plot_promoter.index =  relative.astype(str) + '\n'+ mutagenesis_df.pos.astype(str)
-    else: plot_promoter.index =  relative.astype(str) 
+    # The x-labels will be the relative position and the absolute
+    if TSS_position != 0:
+        plot_promoter.index = (
+            relative.astype(str) + "\n" + mutagenesis_df.pos.astype(str)
+        )
+    else:
+        plot_promoter.index = relative.astype(str)
 
-    onehot_seq = get_one_hot([''.join(seq)], L_max = len(seq))[0]
+    onehot_seq = get_one_hot(["".join(seq)], L_max=len(seq))[0]
 
-    
-    fig, ax = plt.subplots(figsize= (40, 7), nrows=6, ncols=2, gridspec_kw={'height_ratios': [1, 3,4,1,1,1], 'width_ratios':[50,1]})
+    fig, ax = plt.subplots(
+        figsize=(40, 7),
+        nrows=6,
+        ncols=2,
+        gridspec_kw={"height_ratios": [1, 3, 4, 1, 1, 1], "width_ratios": [50, 1]},
+    )
     plt.subplots_adjust(wspace=0.001)
-    fig.delaxes(ax[3,0])
-    
-    fig.delaxes(ax[0,1])
-    fig.delaxes(ax[1,1])
-    fig.delaxes(ax[2,1])
-    fig.delaxes(ax[3,1])
-    fig.delaxes(ax[4,1])
-    fig.delaxes(ax[5,1])
-    
+    fig.delaxes(ax[3, 0])
+
+    fig.delaxes(ax[0, 1])
+    fig.delaxes(ax[1, 1])
+    fig.delaxes(ax[2, 1])
+    fig.delaxes(ax[3, 1])
+    fig.delaxes(ax[4, 1])
+    fig.delaxes(ax[5, 1])
 
     ############ First row plot is the DNA sequence
 
     ##Add arrow where TSS is
-    if TSS_position != 0: 
-        ax[0,0].annotate("", xy=(highlight_position+4, 2), xytext=(highlight_position, 1), 
-                         arrowprops=dict(arrowstyle="->", linewidth=1, connectionstyle="angle,angleA=90,angleB=180,rad=0"), annotation_clip=False)
-        #ax[0,0].annotate("", xy=(highlight_position, 1), xytext=(highlight_position, 2), arrowprops=dict(arrowstyle="-", linewidth=1), annotation_clip=False)
-        
-    print("Plotting reference sequence", flush=True)
-    plot_logo(np.transpose(onehot_seq), ax_name = ax[0,0], ylabel = '', colors_base=True,
-                               highlight_position=highlight_position)
+    if TSS_position != 0:
+        ax[0, 0].annotate(
+            "",
+            xy=(highlight_position + 4, 2),
+            xytext=(highlight_position, 1),
+            arrowprops=dict(
+                arrowstyle="->",
+                linewidth=1,
+                connectionstyle="angle,angleA=90,angleB=180,rad=0",
+            ),
+            annotation_clip=False,
+        )
+        # ax[0,0].annotate("", xy=(highlight_position, 1), xytext=(highlight_position, 2), arrowprops=dict(arrowstyle="-", linewidth=1), annotation_clip=False)
+
+    plot_logo(
+        np.transpose(onehot_seq),
+        ax_name=ax[0, 0],
+        ylabel="",
+        colors_base=True,
+        highlight_position=highlight_position,
+    )
     # Add prediction in the tittle
-    pred = predict_fragments(seq, 600, model)
-    title = f'{title} \nPredicted wildtype activity: {pred:.4f}'
-    ax[0,0].set_title(f'{promoter_name}  {title}', fontsize='large')
+    #pred = predict_fragments(seq, 600, model)
+    #title = f"{title} \nPredicted wildtype activity: {pred:.4f}"
+    ax[0, 0].set_title(f"{promoter_name}  {title}", fontsize="large")
     # remove y-axis info from this row
-    ax[0,0].yaxis.set_tick_params(labelleft=False)
-    ax[0,0].set_yticks([])
+    ax[0, 0].yaxis.set_tick_params(labelleft=False)
+    ax[0, 0].set_yticks([])
 
+    ########### Third row plot is the heatmap
 
-    ########### Third row plot is the heatmap 
-    print("Plotting heatmap", flush=True)
-
-    #In case there are NaNs
+    # In case there are NaNs
     mask = plot_promoter.T.isnull()
     max_abs_value = plot_promoter.abs().max().max()
-    g = sns.heatmap(plot_promoter.T, ax=ax[2,0],  cmap="RdBu", center=0, xticklabels=10, 
-                        cbar=False, mask=mask, vmin=(-max_abs_value), vmax=max_abs_value)   
-
-    ax[2,0].set_ylabel(f'')
-    ax[2,0].set_xlabel(f"Position (bp)")
-
-    #now compute the average importance for each nucleotide in the reference sequnece
-    vector_importance = plot_promoter.mean(axis=1, skipna=True)   
-    #If any nt is NaN, it's because all the measurements where NaN, in that case we fill it with 0
-    #if vector_importance.isna().any(): vector_importance = vector_importance.fillna(0) 
-    
-    attribution_real = np.transpose(onehot_seq*np.expand_dims(vector_importance, 1))
-
-    ########### 4th and 5th row plots the hits (similar to known motifs)
-    #Plot the best matches with known PFM
-    print("Plotting HOCOMOCO motifs", flush=True)
-    find_hits_and_make_logo(attribution_real, [ax[4,0],ax[5,0]], PFM_hocomoco_dict, cutoff=cutoff, best_motif_in_range=15, known_ICM=ICT_hocomoco_dict, fig=fig, hits=hits)
-
-    ###########  2nd row is the variant effect
-    plot_logo(attribution_real, ax_name = ax[1,0], ylabel = 'Variant effect\n(REF-mean(ALT))', 
-                               colors_base=True, highlight_position=highlight_position)
-
-    fig.colorbar(ax[2,0].get_children()[0], ax=ax[2,1], orientation="vertical", fraction=0.5, label= 'Variant effect\n(REF-ALT)')
-
-
-    #If you want return the axis and fig
-    if return_fig == True: return(fig, ax)
-
-    if output_file is False: plt.show()
-    else: plt.savefig(output_file, bbox_inches="tight")
-
-
-def predict_SuRE_and_correlation(
-    model, PFM_dict, consensus_dict, L_max, random_sequences
-):
-    """
-    This function will place a motif in the middle of the sequence compute the SuRE score,
-     and correlation with a known PFM.
-
-     Args:
-        model
-        PFM_dict: (dit) PFM names as keys and PFM as values
-        consensus_dict: (dict) Motif names as keys and consensus sequences as values
-        L_max: (int) Length max accepted by model
-        random_sequences: (list) List of random sequences to use.
-
-    Returns:
-        pred_motifs: (pd.K562_prom_enhframe) For Each motif contains information: 'pred_sure', 'zscore', 'mean_rnd', 'std_rnd', 'rho_pcc'
-    """
-    import time
-
-    # Loop through random sequences and computes their SuRE score, create a dictionary for that
-    ## use later to compute the zscores
-    back_seq_predictions = {}
-    for seq in random_sequences:
-        X = torch.Tensor(np.float32(get_one_hot([seq], L_max))).permute(0, 2, 1)
-
-        if torch.cuda.is_available():
-            X = X.cuda()
-
-        with torch.no_grad():
-            sure_score = model(X).item()
-
-        back_seq_predictions[seq] = sure_score
-
-    mean_bck = np.mean(list(back_seq_predictions.values()))
-    std_bck = np.std(list(back_seq_predictions.values()))
-
-    # Iterate through motifs
-
-    pred_motif = []
-
-    # Loop through all motifs
-    for it, motif in enumerate(PFM_dict.keys()):
-        if it % 55 == 0:
-            print(f" Iteration {it}/{len(PFM_dict.keys())}", flush=True)
-
-        # Get consensus sequence
-        cons = consensus_dict[motif]
-
-        # Create empty array and update it for each random sequence
-        att_rnd_seqs = np.empty((4, len(cons)))
-        scores_normalized, scores_raw = [], []
-
-        ##Loop through all sequences
-        t = time.time()
-        for i_seq, rand_seq in enumerate(random_sequences):
-
-            seq = list(rand_seq)
-
-            # Place the consensus sequence in the middle of  the random/backgorund sequence
-            half_seq = int(len(seq) / 2 - len(cons) / 2)
-            seq[half_seq : (half_seq + len(cons))] = cons
-            seq = "".join(seq)
-
-            att_all = (
-                motif_attribution(
-                    seq=seq,
-                    L_max=L_max,
-                    start_motif=half_seq,
-                    end_motif=(half_seq + len(cons)),
-                    completemodel=model,
-                )
-                .cpu()
-                .numpy()
-            )
-
-            att_rnd_seqs += att_all
-
-            ##Now compute SuRE score
-
-            X = torch.Tensor(np.float32(get_one_hot([seq], L_max))).permute(0, 2, 1)
-
-            if torch.cuda.is_available():
-                X = X.cuda()
-
-            with torch.no_grad():
-                sure_score = model(X).item()
-
-            # Now substract the sure score of that background sequence
-            scores_normalized.append(sure_score - back_seq_predictions[rand_seq])
-            scores_raw.append(sure_score)
-
-        sure_score_normalized_background = np.mean(scores_normalized)
-        zscore = (np.mean(scores_raw) - mean_bck) / std_bck
-
-        # Loop through random sequences is done
-        att_rnd_seqs /= i_seq + 1
-
-        hits = compute_correlation_between_motifs(
-            pfm=PFM_dict[motif], motif_attribution=att_rnd_seqs
-        )
-
-        pred_motif.append(
-            [motif, sure_score_normalized_background, zscore, mean_bck, std_bck, hits]
-        )
-
-    pred_motifs = pd.DataFrame(
-        pred_motif,
-        columns=["motif", "pred_sure", "zscore", "mean_rnd", "std_rnd", "rho_pcc"],
+    g = sns.heatmap(
+        plot_promoter.T,
+        ax=ax[2, 0],
+        cmap="RdBu",
+        center=0,
+        xticklabels=10,
+        cbar=False,
+        mask=mask,
+        vmin=(-max_abs_value),
+        vmax=max_abs_value,
     )
 
-    return pred_motifs
+    ax[2, 0].set_ylabel(f"")
+    ax[2, 0].set_xlabel(f"Position (bp)")
+
+    # now compute the average importance for each nucleotide in the reference sequnece
+    vector_importance = plot_promoter.mean(axis=1, skipna=True)
+    # If any nt is NaN, it's because all the measurements where NaN, in that case we fill it with 0
+    # if vector_importance.isna().any(): vector_importance = vector_importance.fillna(0)
+
+    attribution_real = np.transpose(onehot_seq * np.expand_dims(vector_importance, 1))
+
+    ########### 4th and 5th row plots the hits (similar to known motifs)
+    # Plot the best matches with known PFM
+    find_hits_and_make_logo(
+        attribution_real,
+        [ax[4, 0], ax[5, 0]],
+        PFM_hocomoco_dict,
+        cutoff=cutoff,
+        best_motif_in_range=15,
+        known_ICM=ICT_hocomoco_dict,
+        fig=fig,
+        hits=hits,
+    )
+
+    ###########  2nd row is the variant effect
+    plot_logo(
+        attribution_real,
+        ax_name=ax[1, 0],
+        ylabel="Variant effect\n(REF-mean(ALT))",
+        colors_base=True,
+        highlight_position=highlight_position,
+    )
+
+    fig.colorbar(
+        ax[2, 0].get_children()[0],
+        ax=ax[2, 1],
+        orientation="vertical",
+        fraction=0.5,
+        label="Variant effect\n(REF-ALT)",
+    )
+
+    # If you want return the axis and fig
+    if return_fig == True:
+        return (fig, ax)
+
+    if output_file is False:
+        plt.show()
+    else:
+        plt.savefig(output_file, bbox_inches="tight")

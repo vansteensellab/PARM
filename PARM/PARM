@@ -13,13 +13,12 @@ If not, see <http://www.gnu.org/licenses/>.
 """
 
 import argparse
-from rrwick_help_formatter import MyParser, MyHelpFormatter
-from PARM_predict import PARM_predict
-from PARM_mutagenesis import PARM_mutagenesis, PARM_plot_mutagenesis
+from .rrwick_help_formatter import MyParser, MyHelpFormatter
+from .PARM_predict import PARM_predict
+from .PARM_mutagenesis import PARM_mutagenesis, PARM_plot_mutagenesis
+from .version import __version__
 import warnings
 warnings.filterwarnings("ignore")
-
-__version__ = "0.1.0"
 
 
 def main():
@@ -164,7 +163,7 @@ def plot(args):
         parm_version=__version__,
     )
 
-# Predict task ===================================================================
+# Predict task =================================================================
 def predict_subparser(subparsers):
 
     group = subparsers.add_parser(
@@ -213,7 +212,7 @@ def predict_subparser(subparsers):
 
     group.set_defaults(func=predict)
 
-# Mutagenesis task ===================================================================
+# Mutagenesis task =============================================================
 def mutagenesis_subparser(subparsers):
     group = subparsers.add_parser(
         "mutagenesis",
@@ -269,7 +268,7 @@ def mutagenesis_subparser(subparsers):
 
     group.set_defaults(func=mutagenesis)
 
-# Plot task ===================================================================
+# Plot task ====================================================================
 def plot_subparser(subparsers):
     group = subparsers.add_parser(
         "plot",
@@ -340,7 +339,7 @@ def bye_message():
     "...............\n"
     "")
 
-# Main ===============================================================================
+# Main =========================================================================
 if __name__ == "__main__":
     main()
     print(bye_message(), flush=True)

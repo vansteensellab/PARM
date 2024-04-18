@@ -16,7 +16,7 @@ import numpy as np
 from Bio import SeqIO
 import pandas as pd
 import os
-from PARM_utils_load_model import load_PARM
+from .PARM_utils_load_model import load_PARM
 import PARM_misc
 
 

@@ -19,7 +19,7 @@ import pandas as pd
 import os
 import io
 import urllib
-from PARM_utils_load_model import load_PARM
+from .PARM_utils_load_model import load_PARM
 import PARM_misc
 from tqdm import tqdm
 from matplotlib import pyplot as plt, colors

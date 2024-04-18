@@ -17,7 +17,7 @@ from Bio import SeqIO
 import pandas as pd
 import os
 from .PARM_utils_load_model import load_PARM
-import PARM_misc
+from .PARM_misc import log
 
 
 def PARM_predict(input, output, model_weights, parm_version):
@@ -26,13 +26,13 @@ def PARM_predict(input, output, model_weights, parm_version):
     Writes the output as tab-separated values.
     """
     # Load models
-    PARM_misc.log("Loading models", parm_version)
+    log("Loading models", parm_version)
     complete_models = dict()
     for model_weight in model_weights:
         model_name = os.path.basename(model_weight).split(".")[0]
         complete_models["prediction_" + model_name] = load_PARM(model_weight)
     # Iterate over sequences and predict scores
-    PARM_misc.log("Making predictions", parm_version)
+    log("Making predictions", parm_version)
     output_df = pd.DataFrame()
     for record in SeqIO.parse(input, "fasta"):
         # Initiate output df
@@ -44,7 +44,7 @@ def PARM_predict(input, output, model_weights, parm_version):
         # Store in output df
         output_df = pd.concat([output_df, tmp], axis=0, ignore_index=True)
     # Write output
-    PARM_misc.log("Writing output file", parm_version)
+    log("Writing output file", parm_version)
     output_df.to_csv(output, sep="\t", index=False)
 
 

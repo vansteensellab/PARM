@@ -20,7 +20,7 @@ import os
 import io
 import urllib
 from .PARM_utils_load_model import load_PARM
-import PARM_misc
+from .PARM_misc import log
 from tqdm import tqdm
 from matplotlib import pyplot as plt, colors
 import logomaker
@@ -42,7 +42,7 @@ def PARM_mutagenesis(
     """
     parm_scores = dict()
     # Loading motif database
-    PARM_misc.log("Loading motif database", parm_version)
+    log("Loading motif database", parm_version)
     PFM_hocomoco_dict, _, ICT_hocomoco_dict = dict_jaspar(
         file=motif_database, reverse=True
     )
@@ -50,14 +50,14 @@ def PARM_mutagenesis(
     complete_models = dict()
     for model in model_weights:
         model_name = os.path.basename(model).split(".parm")[0]
-        PARM_misc.log(f"Loading model {model_name}", parm_version)
+        log(f"Loading model {model_name}", parm_version)
         complete_models[model_name] = load_PARM(model)
         parm_scores[model_name] = dict()
 
     # ====================================================================================
     # Parsing the fasta file =============================================================
     # ====================================================================================
-    PARM_misc.log("Computing saturation mutagenesis", parm_version)
+    log("Computing saturation mutagenesis", parm_version)
     total_interactions = len(list(SeqIO.parse(input, "fasta"))) * len(model_weights)
     pbar = tqdm(total=total_interactions, ncols=80)
     for record in SeqIO.parse(input, "fasta"):
@@ -68,7 +68,7 @@ def PARM_mutagenesis(
                 output_directory, sequence_ID, "mutagenesis_" + sequence_ID + ".txt.gz"
             )
             if os.path.exists(mutagenesis_data):
-                PARM_misc.log(
+                log(
                     f"WARNING: mutagenesis data for {sequence_ID} already exist. Skipping...",
                     parm_version,
                 )
@@ -1283,11 +1283,11 @@ def PARM_plot_mutagenesis(
     parm_version: str,
     output_directory: os.path = None,
 ):
-    PARM_misc.log("Reading input directory", parm_version)
+    log("Reading input directory", parm_version)
     input_directory = Path(input)
     plot_extension = "." + plot_format
     total_input_files = len(['_' for _ in input_directory.rglob("mutagenesis_*.txt.gz")])
-    PARM_misc.log("Plotting data", parm_version)
+    log("Plotting data", parm_version)
     pbar = tqdm(total=total_input_files, ncols=80)
     for this_file in input_directory.rglob("mutagenesis_*.txt.gz"):
         file_name = this_file.name

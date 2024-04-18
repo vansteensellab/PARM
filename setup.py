@@ -32,4 +32,4 @@ setup(name='PARM',
       license='GPLv3',
       packages=['PARM'],
       entry_points={"console_scripts": ['PARM = PARM.PARM:main']},
-      python_requires='>=3.10')
+      python_requires='>=3.9')

@@ -87,6 +87,7 @@ def main():
 
     if "func" in args:
         args.func(args)
+        print(bye_message(), flush=True)
     else:
         parser.print_help()
         exit(1)
@@ -127,6 +128,7 @@ def mutagenesis(args):
     print("Model: {: >73}".format(models))
     print("Input:{: >74}".format(args.input))
     print("Output:{: >73}".format(args.output))
+    print("Motif database:{: >65}".format(args.motif_database))
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_mutagenesis(
@@ -243,7 +245,7 @@ def mutagenesis_subparser(subparsers):
         "if it does not exist.",
     )
 
-    optional_arguments = group.add_argument_group("Required arguments")
+    optional_arguments = group.add_argument_group("Optional arguments")
     optional_arguments.add_argument(
         "--motif_database",
         default="https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
@@ -342,4 +344,3 @@ def bye_message():
 # Main =========================================================================
 if __name__ == "__main__":
     main()
-    print(bye_message(), flush=True)

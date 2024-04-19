@@ -91,7 +91,8 @@ def main():
 def print_arguments(left, right, total_width=80):
     left_width = len(left)
     right_width = total_width - left_width
-    print("{0}: {1:>{2}}".format(left, right, right_width - 2))
+    right_str = ', '.join(map(str, right)) if isinstance(right, list) else str(right)
+    print("{0}: {1:>{2}}".format(left, right_str, right_width - 2))
 
 
 def train(args):

@@ -19,10 +19,11 @@ To install **PARM**, first clone this repository in your machine. Make sure you 
 git clone git@github.com:vansteensellab/PARM.git
 ```
 
-Then, create the environment specified in `misc/PARM_env.yml` with all **PARM**'s requirements:
+Then, create the environment with all **PARM**'s requirements:
 
 ```sh
-conda install -n parm -f PARM/misc/PARM_env
+conda create -n parm -c bioconda -c conda-forge -c nvidia -c pytorch pytorch biopython numpy pandas matplotlib logomaker tqdm seaborn einops -y
+conda activate parm
 ```
 
 After this, you can install **PARM** with pip:

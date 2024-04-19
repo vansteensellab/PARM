@@ -1,4 +1,3 @@
-name: deaper_torch
 channels:
 - bioconda
 - conda-forge

@@ -119,7 +119,7 @@ def predict(args):
 
 
 def mutagenesis(args):
-    # Implement the logi for the mutagenesis command here
+    # Check if required arguments are present
     print(description)
     print("=" * 80)
     print("{: ^80}".format("Mutagenesis"))
@@ -181,6 +181,7 @@ def predict_subparser(subparsers):
 
     required_args.add_argument(
         "--model",
+        required = True,
         nargs="+",
         help="Path to the weight files for the model. If you want to perform predictions "
         "for multiple models at once, you can pass them all as a space-separated list. "
@@ -189,10 +190,12 @@ def predict_subparser(subparsers):
     )
     required_args.add_argument(
         "--input",
+        required = True,
         help="Path to the input fasta file with the sequences to be predicted.",
     )
     required_args.add_argument(
         "--output",
+        required = True,
         help="Path to the output file where the predictions will be saved. Output is a "
         "tab-separated file with the sequence, header, and the predicted score.",
     )
@@ -230,17 +233,20 @@ def mutagenesis_subparser(subparsers):
     required_args.add_argument(
         "--model",
         nargs="+",
+        required = True,
         help="Path to the weight files for the model. If you want to perform predictions "
         "for multiple models at once, you can pass them all as a space-separated list. "
         "If you have not trained a model, you can use the pre-trained model from the "
         "default_PARM_models directory.",
     )
     required_args.add_argument(
-        "--input",
+        "--input",        
+        required = True,
         help="Path to the input fasta file with the sequences to have to mutagenesis for.",
     )
     required_args.add_argument(
         "--output",
+        required = True,
         help="Path to the directory where the files will be stored. Will be created "
         "if it does not exist.",
     )
@@ -307,6 +313,14 @@ def plot_subparser(subparsers):
         help="The minimum value of attribution (i.e., the mean attribution score "
         "for the bases of a motif) that a scanned motif needs to present in order "
         "to be shown in the plot (Default: 0.001).",
+    )
+    optional_arguments.add_argument(
+        "--attribution_range",
+        default=None,
+        nargs=2,
+        help="Space-separated range of attribution values to be shown in the plot. "
+        "(like 0.001 0.01). If not provided, the range will be calculated based on "
+        "the values present in the data.",
     )
     optional_arguments.add_argument(
         "--plot_format",

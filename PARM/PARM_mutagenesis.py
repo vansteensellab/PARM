@@ -1282,11 +1282,14 @@ def PARM_plot_mutagenesis(
     plot_format: str,
     parm_version: str,
     output_directory: os.path = None,
+    attribution_range: list = None,
 ):
     log("Reading input directory", parm_version)
     input_directory = Path(input)
     plot_extension = "." + plot_format
-    total_input_files = len(['_' for _ in input_directory.rglob("mutagenesis_*.txt.gz")])
+    total_input_files = len(
+        ["_" for _ in input_directory.rglob("mutagenesis_*.txt.gz")]
+    )
     log("Plotting data", parm_version)
     pbar = tqdm(total=total_input_files, ncols=80)
     for this_file in input_directory.rglob("mutagenesis_*.txt.gz"):
@@ -1324,6 +1327,7 @@ def PARM_plot_mutagenesis(
             title="",
             hits=hits_data,
             output_file=output_file,
+            attribution_range=attribution_range,
         )
         pbar.update(1)
 
@@ -1786,6 +1790,7 @@ def plot_mutagenesis(
     title="",
     hits=None,
     model=None,
+    attribution_range=None,
 ):
     """
     Args:
@@ -1884,8 +1889,8 @@ def plot_mutagenesis(
         highlight_position=highlight_position,
     )
     # Add prediction in the tittle
-    #pred = predict_fragments(seq, 600, model)
-    #title = f"{title} \nPredicted wildtype activity: {pred:.4f}"
+    # pred = predict_fragments(seq, 600, model)
+    # title = f"{title} \nPredicted wildtype activity: {pred:.4f}"
     ax[0, 0].set_title(f"{promoter_name}  {title}", fontsize="large")
     # remove y-axis info from this row
     ax[0, 0].yaxis.set_tick_params(labelleft=False)
@@ -1895,18 +1900,31 @@ def plot_mutagenesis(
 
     # In case there are NaNs
     mask = plot_promoter.T.isnull()
-    max_abs_value = plot_promoter.abs().max().max()
-    g = sns.heatmap(
-        plot_promoter.T,
-        ax=ax[2, 0],
-        cmap="RdBu",
-        center=0,
-        xticklabels=10,
-        cbar=False,
-        mask=mask,
-        vmin=(-max_abs_value),
-        vmax=max_abs_value,
-    )
+    if attribution_range is not None:  # If limits are defined set them in heatmap
+        _ = sns.heatmap(
+            plot_promoter.T,
+            ax=ax[2, 0],
+            cmap='RdBu',
+            center=0,
+            xticklabels=10,
+            cbar=False,
+            vmin=attribution_range[0],
+            vmax=attribution_range[1],
+            mask=mask,
+        )
+
+    else:  # Otherwise take the minimal and maximal values
+        _ = sns.heatmap(
+            plot_promoter.T,
+            ax=ax[2, 0],
+            cmap='RdBu',
+            center=0,
+            xticklabels=10,
+            cbar=False,
+            vmin=plot_promoter.min(axis=None).min(),
+            vmax=plot_promoter.max(axis=None).max(),
+            mask=mask,
+        )
 
     ax[2, 0].set_ylabel(f"")
     ax[2, 0].set_xlabel(f"Position (bp)")

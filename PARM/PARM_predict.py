@@ -18,6 +18,7 @@ import pandas as pd
 import os
 from .PARM_utils_load_model import load_PARM
 from .PARM_misc import log
+from tqdm import tqdm
 
 
 def PARM_predict(input, output, model_weights, parm_version):
@@ -33,6 +34,10 @@ def PARM_predict(input, output, model_weights, parm_version):
         complete_models["prediction_" + model_name] = load_PARM(model_weight)
     # Iterate over sequences and predict scores
     log("Making predictions", parm_version)
+    total_interactions = sum(1 for _ in SeqIO.parse(input, "fasta")) * len(
+        complete_models
+    )
+    pbar = tqdm(total=total_interactions, ncols=80)
     output_df = pd.DataFrame()
     for record in SeqIO.parse(input, "fasta"):
         # Initiate output df
@@ -41,6 +46,7 @@ def PARM_predict(input, output, model_weights, parm_version):
         # Get predictions for all models
         for model_name, model in complete_models.items():
             tmp[model_name] = get_prediction(sequence, model)
+            pbar.update(1)
         # Store in output df
         output_df = pd.concat([output_df, tmp], axis=0, ignore_index=True)
     # Write output
@@ -54,9 +60,9 @@ def get_prediction(sequence, complete_model):
     """
     if torch.cuda.is_available():
         complete_model = complete_model.cuda()
-    onehot_fragment = torch.tensor(np.float32(sequence_to_onehot([sequence], L_max = len(sequence)))).permute(
-        0, 2, 1
-    )
+    onehot_fragment = torch.tensor(
+        np.float32(sequence_to_onehot([sequence], L_max=len(sequence)))
+    ).permute(0, 2, 1)
     if torch.cuda.is_available():
         onehot_fragment = onehot_fragment.cuda()
     score = complete_model(onehot_fragment).item()
@@ -102,6 +108,5 @@ def sequence_to_onehot(sequences, L_max, for_mutagenesis=False):
             PW = [int(np.ceil(pw)), int(np.floor(pw))]
             one_hot.append(np.pad(x, [PW, [0, 0]], constant_values=0))
         one_hot = np.array(one_hot)
-        
 
     return one_hot

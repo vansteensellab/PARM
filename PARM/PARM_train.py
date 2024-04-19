@@ -13,7 +13,7 @@ from torchsummary import summary
 from optuna.trial import TrialState
 import joblib
 import torch
-from torch.nn.functional import pad
+import torch.nn as nn
 from .PARM_utils_load_model import load_PARM
 from .PARM_utils_data_loader import pad_collate, ShuffleBatchSampler, H5Dataset, index_of_interest, GradualWarmupScheduler
 

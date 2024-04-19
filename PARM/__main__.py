@@ -99,7 +99,7 @@ def train(args):
     # Implement the logic for the train command here
     print(description)
     print("=" * 80)
-    print("{: ^80}".format("Predict"))
+    print("{: ^80}".format("Train"))
     print("-" * 80)
     print_arguments("Input", args.dir_input)
     print_arguments("Output", args.out_dir)

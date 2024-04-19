@@ -5,7 +5,6 @@ import random
 import h5py
 import os
 import pandas as pd
-import pysam
 import re
 from torch.optim.lr_scheduler import _LRScheduler
 
@@ -50,78 +49,6 @@ def getOneHot(Seqs, L_max=False, padding_value=0):
     X_OneHot = np.array(X_OneHot)
 
     return X_OneHot
-
-
-def SamCoord_2_Seq(coord, snp, genome: str):
-    """
-    Function to obtain the sequence of a region in the genome given coordiantes.
-    Args:
-      coord: (list) coordinates of fragment
-       coord[0]: chr
-       coord[1]: start
-       coord[2]: end (inclued)
-       coord[3]: strand
-
-      snp: (list) snp information of fragment. Several SNP are possible separated by commas.
-       snp[0]: start relative position (0-based)
-       snp[1]: SNP observed base in sequence
-       snp[2]: (optional) end relative position (0-based), useful for insertions. NOT IMPLEMENTED YET
-
-      genome: (str) file location of FASTA file hg19 genome
-
-    rerturns:
-      seq: (str)
-    """
-
-    MY_REF = pysam.FastaFile(genome)
-    seq = MY_REF.fetch(coord[0], coord[1], coord[2])
-    seq = seq.upper()  # There are regions in the genome that have lower case
-    # take SNP into account
-    if snp[0] is not None and snp[0] != "nan" and snp[0] == snp[0]:
-
-        snp_pos = str(snp[0]).split(",")
-        # snp_pos = snp[0]
-        snp_base = str(snp[1]).split(",")
-        snp_base = snp[1]
-        for p, b in zip(snp_pos, snp_base):
-            if int(p) > len(seq):
-                raise TypeError(
-                    f"Mutation position should be relative to length. SNP position {p} > {len(seq)} "
-                )
-
-            if b in ["A", "C", "G", "T"]:
-                s = list(seq)
-                s[int(p)] = b
-                seq = "".join(s)
-
-            elif b == "-":  # deletion
-                s = list(seq)
-                _ = s.pop(int(p))
-                seq = "".join(s)
-
-            elif len(b) > 1 and all(
-                substring in ["A", "C", "G", "T"] for substring in b
-            ):  # it's multiple substitutions at the same time (NO INSERTION)
-                s = list(seq)
-                s[int(p) : (int(p) + len(b))] = b
-                seq = "".join(s)
-
-            """elif len(b) > 1 and all(substring in ['A','C','G','T'] for substring in b): #Insertion
-                print('b', b, 'p', p)
-                #We assume that the letter of the SNPpos is not included in 'b' so that's why we don't replace it
-                s = list(seq)
-                print('s', s)
-                print('b[1:]', b[1:])
-                s.insert(p+1, b[1:])
-                seq = "".join(s)"""
-
-    # take reverse complement. Should be always be after annotating the SNPs as these are annotated in the plus strand
-    if coord[3] == "-":
-        reverse_DNA = "".maketrans("ACGT", "TGCA")
-
-        seq = seq.translate(reverse_DNA)[::-1]
-
-    return seq
 
 
 def index_of_interest(

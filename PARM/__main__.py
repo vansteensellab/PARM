@@ -95,6 +95,12 @@ def main():
         exit(1)
 
 
+def print_arguments(left, right, total_width=80):
+    left_width = len(left)
+    right_width = total_width - left_width
+    print("{0}: {1:>{2}}".format(left, right, right_width - 2))
+
+
 def train(args):
     # Implement the logic for the train command here
     print(f"Training with data from {args.data_file} for {args.epochs} epochs")
@@ -107,9 +113,9 @@ def predict(args):
     print("{: ^80}".format("Predict"))
     print("-" * 80)
     models = ",".join(args.model)
-    print("Model: {: >73}".format(models))
-    print("Input:{: >74}".format(args.input))
-    print("Output:{: >73}".format(args.output))
+    print_arguments("Model", models)
+    print_arguments("Input", args.input)
+    print_arguments("Output", args.output)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_predict(
@@ -127,10 +133,10 @@ def mutagenesis(args):
     print("{: ^80}".format("Mutagenesis"))
     print("-" * 80)
     models = ",".join(args.model)
-    print("Model: {: >73}".format(models))
-    print("Input:{: >74}".format(args.input))
-    print("Output:{: >73}".format(args.output))
-    print("Motif database:{: >65}".format(args.motif_database))
+    print_arguments("Model:", models)
+    print_arguments("Input:", args.input)
+    print_arguments("Output:", args.output)
+    print_arguments("Motif database:", args.motif_database)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_mutagenesis(
@@ -151,11 +157,16 @@ def plot(args):
         out = args.input
     else: 
         out = args.output
-    print("Input:{: >74}".format(args.input))
-    print("Output:{: >73}".format(out))
-    print("Correlation threshold:{: >58}".format(args.correlation_threshold))
-    print("Attribution threshold:{: >58}".format(args.attribution_threshold))
-    print("Plot format:{: >68}".format(args.plot_format))
+    if args.attribution_range is not None:
+        r = " ".join(args.attribution_range)
+    else:
+        r = "None"
+    print_arguments("Input:", args.input)
+    print_arguments("Output:", out)
+    print_arguments("Correlation threshold:", args.correlation_threshold)
+    print_arguments("Attribution threshold:", args.attribution_threshold)
+    print_arguments("Attribution range:", r)    
+    print_arguments("Plot format:", args.plot_format)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_plot_mutagenesis(
@@ -166,6 +177,180 @@ def plot(args):
         plot_format=args.plot_format,
         parm_version=__version__,
     )
+
+
+# Train task ===================================================================
+def train_subparser(subparsers):
+    "Parses inputs from commandline and returns them as a Namespace object."
+
+    def str2bool(v):
+        if v == 'False':
+            return False
+        else:
+            return v
+
+    group = subparsers.add_parser(
+        "train",
+        help="Train a new PARM model from pre-processed MPRA data",
+        formatter_class=MyHelpFormatter,
+        add_help=False,
+        description= 'R|' + description,
+    )
+
+    required_args = group.add_argument_group("Required arguments")
+    # Arguments for the input files
+    required_args.add_argument('--dir_input',
+                        default = ['./splits/focused_library/tss_selection_m300_p100_stranded_EnhA_intersection_intersection'],
+                        nargs='+',
+                        help='directory with one_hot_encoding input files are. If more than one add one after the other.'
+                              'default: (./splits/focused_library/tss_selection_m300_p100_stranded_EnhA_intersection_intersection)')  
+
+    required_args.add_argument('--out_dir',
+                        default = '../analysis/lbarbadillamartinez/output/models/SuRE/',
+                        nargs='?',
+                        help='path to a directory where output files are saved')
+
+    required_args.add_argument('--model_dir',
+                        type=str2bool,
+                        nargs='?',
+                        default = False,
+                        help='Directory of pretrained model, if not use False. (default: False)' )
+
+    required_args.add_argument('--type_model',
+                        default = 'ResNet_Attention',
+                        nargs='?',
+                        choices=['ResNet', 'S4', 'ResNet_Attention', 'CNN_jeremie', 'selfattention', 'RNN', 'BPnet', 'basset', 'VAE', 'enformer_architecture', 'enformer'],
+                        help=f'which model to use choose from:\n'
+                                f'ResNet, S4, ResNet_Attention, CNN_jeremie,  selfattention, RNN, BPnet, basset, VAE, enformer_architecture, enformer')
+
+    model_args = group.add_argument_group("CNN-related arguments (optional)")
+    model_args.add_argument('--training_model',
+                        type=str2bool,
+                        default = False,
+                        nargs='?',
+                        help= f'Type of training you are working on. If multiple, separate by "_" \n'
+                        f'  e.g. tuning, adaptive_sampling, TYY1_motif, size_sample, sure_track, multitask, TSS_vector_predict, replicates, multitask, triplet_loss ')
+
+    model_args.add_argument('--cell_line',
+                        default = 'K562',
+                        nargs='?',
+                        help='cell line to work with (K562, HEPG2, hNPC, HCT166, MCF7, mESC or any combination of these separated by two underscores (__)')
+
+    model_args.add_argument('--n_epochs',
+                        default = 7,
+                        nargs = '?',
+                        type = int,
+                        help='Number of epochs to train the data to (default: 7) \n')
+
+    model_args.add_argument('--batch_size',
+                        default = 128,
+                        nargs = '?',
+                        type = int,
+                        help='Number of samples in ech batch to train the data to (default: 128) \n')
+
+    model_args.add_argument('--betas',
+                        default = (0.0005, 0.0005),
+                        nargs = '+',
+                        type = float,
+                        help='L1 and L2 regularization terms respectively. (default: (0.005, 0.005) ) \t run like -betas 0.1 0.2 \n')
+
+    model_args.add_argument('--lr',
+                        default = 0.001,
+                        nargs = '?',
+                        type = float,
+                        help='Learning rate (default: 0.001) \n')
+    
+    model_args.add_argument('--scheduler',
+                        default = True,
+                        nargs = '?',
+                        type = str2bool,
+                        help='Cos scheduler implemented if True (default:True) \n')
+    
+    model_args.add_argument('--weight_decay',
+                        default = 0.0,
+                        nargs = '?',
+                        type = float,
+                        help='Weight decay (default: 0.0) \n')
+    
+    model_args.add_argument('--stranded',
+                        default = False,
+                        nargs = '?',
+                        type = str2bool,
+                        help=' If we are interested in stranded fragments (True, only those matching with TSS)'
+                                ' or also complementary strands (False). Only valid for TSS.  (default: False) \n')
+    
+    model_args.add_argument('--features_fragments_selection',
+                        default = 'TSS',
+                        nargs = '?',
+                        type = str,
+                        help='Features to use to select SuRE fragments of interest (default: TSS) \t'
+                                '   In humans choose from TSS, EnhA, peaks or a combination of them separated by "_" e.g. TSS_EnhA \t'
+                                '   In mice choose from TSS, EnhA_many or EnhA_strong a combination of them separated by "_". \n')
+    
+    model_args.add_argument('--normalization',
+                        default = 'LnNorm',
+                        nargs = '?',
+                        type = str,
+                        help=' Type of normalization. Only two possibles: Log2Norm or LnNorm. '
+                                '(default: LnNorm) \n')
+    
+    model_args.add_argument('--criterion',
+                        default = 'poisson',
+                        nargs = '?',
+                        type = str,
+                        help=' Type of criterion. Only two possibles: MSE or poisson. '
+                                '(default: poisson) \n')
+    
+
+    model_args.add_argument('--downsample',
+                        default = False,
+                        nargs = '?',
+                        help=  'Downsample dataset. What type of downsampling to do \n '  
+                                '   either on number of samples (fragment_downsample) or in number of tss (TSS_downsample) \n '
+                                '(default: False) \n')
+    
+    model_args.add_argument('--adaptor',
+                        default = ('CAGTGAT', 'ACGACTG'),
+                        nargs = '+',
+                        help=  'If not false, give adaptor in 5 and 3 prima to use as padding. \n '  
+                                '   e.g. -adaptor CAGTGAT ACGACTG \n '
+                                '(default: CAGTGAT ACGACTG) \n')
+    
+    model_args.add_argument('--L_max',
+                        default = 600,
+                        nargs = '?',
+                        type = int,
+                        help=  'Maximum length of fragments. Necessary if we want to downsample. \n '  
+                                '(default: 600) \n')
+    
+    model_args.add_argument('--L_min',
+                        default = False,
+                        nargs = '?',
+                        type = int,
+                        help=  'Minimum length of fragments. Necessary if we want to downsample. \n '  
+                                '(default: False) \n')
+    
+    model_args.add_argument('--validation_path',
+                        nargs='+',
+                        type = str,
+                        help=  'Indicate the path of the split will be used for validation ')
+
+    other_args = group.add_argument_group("Other")
+    other_args.add_argument(
+        "-h",
+        "--help",
+        action="help",
+        default=argparse.SUPPRESS,
+        help="Show this help message and exit",
+    )
+    other_args.add_argument(
+        "--version",
+        action="version",
+        version="PARM v" + __version__,
+        help="Show program's version number and exit",
+    )
+
+    group.set_defaults(func=predict)
 
 # Predict task =================================================================
 def predict_subparser(subparsers):

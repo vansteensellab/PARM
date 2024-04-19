@@ -16,6 +16,7 @@ import argparse
 from .rrwick_help_formatter import MyParser, MyHelpFormatter
 from .PARM_predict import PARM_predict
 from .PARM_mutagenesis import PARM_mutagenesis, PARM_plot_mutagenesis
+from .PARM_train import PARM_train
 from .version import __version__
 import warnings
 import os
@@ -95,8 +96,33 @@ def print_arguments(left, right, total_width=80):
 
 def train(args):
     # Implement the logic for the train command here
-    print(f"Training with data from {args.data_file} for {args.epochs} epochs")
-
+    print(description)
+    print("=" * 80)
+    print("{: ^80}".format("Predict"))
+    print("-" * 80)
+    print_arguments("Input", args.dir_input)
+    print_arguments("Output", args.out_dir)
+    print_arguments("Model", args.model_dir)
+    print_arguments("Type model", args.type_model)
+    print_arguments("Training model", args.training_model)
+    print_arguments("Cell line", args.cell_line)
+    print_arguments("Number of epochs", args.n_epochs)
+    print_arguments("Batch size", args.batch_size)
+    print_arguments("Betas", args.betas)
+    print_arguments("Learning rate", args.lr)
+    print_arguments("Scheduler", args.scheduler)
+    print_arguments("Weight decay", args.weight_decay)
+    print_arguments("Stranded", args.stranded)
+    print_arguments("Features fragments selection", args.features_fragments_selection)
+    print_arguments("Normalization", args.normalization)
+    print_arguments("Criterion", args.criterion)
+    print_arguments("Downsample", args.downsample)
+    print_arguments("Adaptor", args.adaptor)
+    print_arguments("L_max", args.L_max)
+    print_arguments("L_min", args.L_min)
+    print_arguments("Validation path", args.validation_path)
+    print("=" * 80)
+    PARM_train(args)
 
 def predict(args):
     # Implement the logic for the predict command here

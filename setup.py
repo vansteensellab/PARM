@@ -22,14 +22,14 @@ __version__ = '0.0.0'
 exec(open('PARM/version.py').read())
 
 
-setup(name='PARM',
-      version=__version__,
-      description='PARM: Promoter Activity Regulatory Model',
-      long_description=readme(),
-      long_description_content_type='text/markdown',
-      url='https://github.com/vansteensellab/PARM',
-      author='PARM developers',
-      license='GPLv3',
-      packages=['PARM'],
-      entry_points={"console_scripts": ['PARM = PARM.__main__:main']},
-      python_requires='>=3.9')
+setup(name='parm',
+    version=__version__,
+    description='PARM: Promoter Activity Regulatory Model',
+    long_description=readme(),
+    long_description_content_type='text/markdown',
+    url='https://github.com/vansteensellab/PARM',
+    author='PARM developers',
+    license='GPLv3',
+    packages=['PARM'],
+    entry_points={"console_scripts": ['parm = PARM.__main__:main']},
+    python_requires='>=3.9')

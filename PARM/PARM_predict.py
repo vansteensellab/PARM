@@ -50,6 +50,7 @@ def PARM_predict(input, output, model_weights, parm_version):
         # Store in output df
         output_df = pd.concat([output_df, tmp], axis=0, ignore_index=True)
     # Write output
+    pbar.close()
     log("Writing output file", parm_version)
     output_df.to_csv(output, sep="\t", index=False)
 

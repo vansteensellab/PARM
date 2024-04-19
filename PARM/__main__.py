@@ -18,6 +18,7 @@ from .PARM_predict import PARM_predict
 from .PARM_mutagenesis import PARM_mutagenesis, PARM_plot_mutagenesis
 from .version import __version__
 import warnings
+import os
 warnings.filterwarnings("ignore")
 
 
@@ -25,12 +26,12 @@ def main():
     global description
     description = (
         """
-  _____          _____   __  __ 
- |  __ \  /\    |  __ \ |  \/  |
- | |__) |/  \   | |__) || \  / |
- |  ___// /\ \  |  _  / | |\/| |
- | |   / ____ \ | | \ \ | |  | |
- |_|  /_/    \_\|_|  \_\|_|  |_|
+██████╗  █████╗ ██████╗ ███╗   ███╗
+██╔══██╗██╔══██╗██╔══██╗████╗ ████║
+██████╔╝███████║██████╔╝██╔████╔██║
+██╔═══╝ ██╔══██║██╔══██╗██║╚██╔╝██║
+██║     ██║  ██║██║  ██║██║ ╚═╝ ██║
+╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝
  
  Promoter Activity Regulatory Model
  Version: """
@@ -49,7 +50,8 @@ def main():
     # Train task =========================================================================
     # ====================================================================================
     parser_train = subparsers.add_parser(
-        "train", help="Train a new PARM model from pre-processed MPRA data"
+        "train", help="Train a new PARM model from pre-processed MPRA data",
+        description= 'R|' + description,
     )
     parser_train.add_argument("data_file", help="Path to the training data file")
     parser_train.add_argument(
@@ -175,6 +177,7 @@ def predict_subparser(subparsers):
         "predicted score.",
         formatter_class=MyHelpFormatter,
         add_help=False,
+        description= 'R|' + description,
     )
 
     required_args = group.add_argument_group("Required arguments")
@@ -226,6 +229,7 @@ def mutagenesis_subparser(subparsers):
         "each mutation, and the list of known motifs scanned in the sequence",
         formatter_class=MyHelpFormatter,
         add_help=False,
+        description= 'R|' + description,
     )
 
     required_args = group.add_argument_group("Required arguments")
@@ -284,6 +288,7 @@ def plot_subparser(subparsers):
         "Produces a PDF file with the mutagenesis plot.",
         formatter_class=MyHelpFormatter,
         add_help=False,
+        description= 'R|' + description,
     )
     
     required_args = group.add_argument_group("Required arguments")
@@ -355,6 +360,12 @@ def bye_message():
     "...............\n"
     "")
 
+
+def check_file(file):
+    """Check if file exists, otherwise return error"""
+    if not os.path.isfile(file):
+        raise FileNotFoundError(f"File {file} not found.")
+    
 # Main =========================================================================
 if __name__ == "__main__":
     main()

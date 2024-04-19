@@ -14,7 +14,7 @@ from optuna.trial import TrialState
 import joblib
 import torch
 from torch.nn.functional import pad
-from .PARM_utils_load_model import load_model
+from .PARM_utils_load_model import load_PARM
 from .PARM_utils_data_loader import pad_collate, ShuffleBatchSampler, H5Dataset, index_of_interest, GradualWarmupScheduler
 
 #from s4 import setup_optimizer, S4Model
@@ -355,7 +355,7 @@ def objective(trial, output_directory, input_directory, pretrained_directory, ce
     ###Load model
 
     #cell_type_strip_replicates = celltype.replace('pNK7_','').replace('_B','')
-    model = load_model(trial=trial, output_directory=output_directory, pretrained_directory= pretrained_directory, 
+    model = load_PARM(trial=trial, output_directory=output_directory, pretrained_directory= pretrained_directory, 
                         celltype=celltype, type_loss = type_criterion, lr= lr, L_max = L_max, L_min=L_min)
     dummybatch = torch.zeros(1, 4, L_max)
 

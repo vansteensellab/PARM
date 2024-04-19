@@ -124,6 +124,7 @@ def train(args):
     print("=" * 80)
     PARM_train(args)
 
+
 def predict(args):
     # Implement the logic for the predict command here
     print(description)
@@ -368,7 +369,7 @@ def train_subparser(subparsers):
         help="Show program's version number and exit",
     )
 
-    group.set_defaults(func=predict)
+    group.set_defaults(func=train)
 
 # Predict task =================================================================
 def predict_subparser(subparsers):

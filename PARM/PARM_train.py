@@ -3,7 +3,6 @@ import sys
 import os
 import pandas as pd
 import time
-from argparse import ArgumentParser, RawTextHelpFormatter
 from matplotlib import pyplot as plt, colors
 import optuna
 from sklearn.metrics import r2_score
@@ -11,16 +10,205 @@ from scipy.stats import pearsonr
 import math
 import seaborn as sns
 from torchsummary import summary
- from optuna.trial import TrialState
-import torch.optim as optim
+from optuna.trial import TrialState
 import joblib
 import torch
 from torch.nn.functional import pad
-from utils.load_model import load_model
-from utils.utils_dataloader import pad_collate, ShuffleBatchSampler, H5Dataset, index_of_interest, GradualWarmupScheduler
+from .PARM_utils_load_model import load_model
+from .PARM_utils_data_loader import pad_collate, ShuffleBatchSampler, H5Dataset, index_of_interest, GradualWarmupScheduler
 
 #from s4 import setup_optimizer, S4Model
 print(f'\n Cuda working? {torch.cuda.is_available()} \n', flush=True)
+
+
+
+def PARM_train(args=False):
+    "Perform CNN for SuRE data."
+    if not args: args = parse_args()
+
+
+    #############
+    # 1. Load arguments
+    input_directory = args.dir_input
+    out_dir = args.out_dir
+    model_directory = args.model_dir
+    cell_line = args.cell_line
+    normalization = args.normalization
+    criterion = args.criterion
+    downsample = args.downsample
+    adaptor = args.adaptor
+    L_max = args.L_max
+    scheduler = args.scheduler
+    L_min = args.L_min
+    weight_decay = args.weight_decay
+    validation_path = args.validation_path
+    if type(validation_path) != list: validation_path = list(validation_path)
+
+    #Arguments for training
+    n_epochs = args.n_epochs
+    batch_size = args.batch_size
+    betas = args.betas
+    lr = args.lr
+    if len(betas) != 2: raise Exception(f'Wrong values of betas. You must provide two values, you provided {len(betas)}')
+
+    stranded = args.stranded
+    features_fragments_selection = args.features_fragments_selection
+
+    #############
+    # 2. Find which dataset we are working on from input directory
+
+    #Define which genome we are working with
+    dataset = ''.join(input_directory).split('/')
+
+    ##possible datsets
+
+    available_datasets = ['SuRE4n', 'SuRE23', 'focused_library', 'mouse']
+
+    dataset_genome = []
+
+    for single_directory in input_directory: #If there's more than one directory
+
+        dataset = single_directory.split('/')
+    
+        dataset_genome_ind = [possible_dataset for possible_dataset in available_datasets if possible_dataset in single_directory]
+        dataset_genome_ind = np.unique(dataset_genome_ind).tolist()
+        if len(dataset_genome_ind) > 1: raise TypeError(f"Error: more than one dataset in a single path {single_directory}")
+
+        #Try to find sub information dependign on dataset
+
+        #if 'mouse' in single_directory and '_sample' not in single_directory: dataset_genome_ind.append([x for x in dataset if '_sample' in x][0])
+
+        if 'thresh' in input_directory: dataset_genome_ind.append([x for x in dataset if 'thresh' in x][0])
+
+        if 'split_' in input_directory: dataset_genome_ind.append([x for x in dataset if 'split_' in x][0]) 
+        
+        dataset_genome.append('_'.join(dataset_genome_ind))
+
+        #Find which subset of feature
+        if 'mouse' not in input_directory: dataset_subgroup = [x for x in dataset if ('intersection' in x or 'TSS' in x)][0]
+        else: dataset_subgroup = '' 
+    
+    dataset_genome = np.unique(dataset_genome).tolist()
+    dataset_genome = '_'.join(dataset_genome)
+
+
+    #############
+    # 3. Create output directory
+
+
+    output_directory = os.path.join(out_dir, args.type_model, dataset_genome, dataset_subgroup, cell_line,
+                                    features_fragments_selection, f'strand_{str(stranded)}',
+                                    args.training_model if args.training_model else '')
+
+    # Add possible extensions that the output directory might have
+
+    ## If the output_directory contains "motif_" term, it means that only motifs of a specific family are going to be studied.
+    if 'motif_' in output_directory:
+        motif_or_family = (args.type_model).replace('motif_', '')
+        print(f'Motif or family {motif_or_family} being studied', flush=True)
+
+    ## If model_directory is diferent than False, it means that weights are going to be loaded from a previous model
+    pretrained_directory = model_directory
+    if model_directory:
+        print(f' Pretrained directory used in: {pretrained_directory}')
+        output_directory = os.path.join(output_directory, 'pretrained')
+
+
+    ##If output direcotry already exists, create different trial directories
+    if os.path.exists(output_directory):
+        for i in range(2,100):
+            trial_directory = os.path.join(output_directory, 'trial_'+str(i))
+            if not os.path.exists(trial_directory):
+                output_directory = trial_directory
+                break
+
+    if not os.path.exists(output_directory): os.makedirs(output_directory) #Create folder where all the output is going to be saved
+
+    #All printing functions will be saved in a file
+    f = open(os.path.join(output_directory, 'screen_messages.txt'), 'w')
+
+    print(f' Output directory: {output_directory} \n', flush=True)
+    sys.stdout = f
+
+    print(f' Input Directory {input_directory} \n', flush=True)
+
+    #Check if validation data is in training data
+    error = any(file_validation in input_directory for file_validation in validation_path)
+    if error: raise ValueError('Error: Your validation data is in your trainning data.')
+
+    print(f' Validation Directory {validation_path} \n', flush=True)
+
+    if model_directory:
+        print(f' Pretrained directory used in: {pretrained_directory}')
+
+
+    #############
+    # 4. Run models
+
+    param_model = { 'output_directory' : output_directory,
+                    'input_directory' : args.dir_input,
+                    'pretrained_directory'  : pretrained_directory,
+                    'celltype' : cell_line, 'n_epochs' : n_epochs,
+                    'batch_size' : batch_size, 'betas' : betas, 'lr':lr,
+                    'features_fragments_selection': features_fragments_selection, 
+                    'stranded' : stranded, 'normalization': normalization,
+                    'type_criterion': criterion, 'adaptor':adaptor, 'L_max':L_max,
+                    'scheduler': scheduler,
+                    'weight_decay':weight_decay, 'L_min':L_min, 'validation_path':validation_path}
+
+    #Hyperparameter optimization with optuna
+    if 'tuning' in output_directory:
+
+        objective_args = lambda trial: objective(trial, **param_model)
+
+        print(f'Start study', flush='True')
+        study = optuna.create_study(study_name='CNN_selfattention',direction='minimize') #bayesian optimization
+        study.optimize(objective_args, n_trials=40, show_progress_bar=True)
+
+        pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+        complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+
+        print(f"Study statistics: \n"
+            f"  Number of finished trials: {len(study.trials)} \n"
+            f"  Number of pruned trials: {len(pruned_trials)} \n"
+            f"  Number of complete trials: {len(complete_trials)} \n")
+
+        trial = study.best_trial
+        print(f"Best trial: \n"
+              f"  Value: {trial.value} \n"
+              f"  Params: \n")
+        for key, value in trial.params.items():
+            print("    {}: {}".format(key, value))
+
+
+        joblib.dump(study, os.path.join(output_directory,"study.pkl"))
+        importance_hyperparam = optuna.importance.get_param_importances(study)
+
+
+        print(importance_hyperparam)
+
+    else:
+
+        ##########
+        if not downsample:
+            objective(None, **param_model)
+
+        else:
+            min_labelsnoise = 90
+            step = 10
+            max_labelsnoise = 100
+            range_noise = list(range(min_labelsnoise,(max_labelsnoise)+step,step))
+
+            for perc_labels in range_noise:
+                print(f' ############################################# \n', flush=True)
+                print(f' \n Percentage modification {perc_labels} \n', flush=True)
+
+                perc_labels = perc_labels/100
+
+                objective(None, perc_labels = perc_labels, **param_model)
+
+    f.close()
+
 
 
 
@@ -642,197 +830,3 @@ def validation_loop(valid_dataloader, model, criterion, output_directory, betas,
     
     return(y_val_predicted, y_val_real, val_loss)
 
-
-def main(args=False):
-    "Perform CNN for SuRE data."
-    if not args: args = parse_args()
-
-
-    #############
-    # 1. Load arguments
-    input_directory = args.dir_input
-    out_dir = args.out_dir
-    model_directory = args.model_dir
-    cell_line = args.cell_line
-    normalization = args.normalization
-    criterion = args.criterion
-    downsample = args.downsample
-    adaptor = args.adaptor
-    L_max = args.L_max
-    scheduler = args.scheduler
-    L_min = args.L_min
-    weight_decay = args.weight_decay
-    validation_path = args.validation_path
-    if type(validation_path) != list: validation_path = list(validation_path)
-
-    #Arguments for training
-    n_epochs = args.n_epochs
-    batch_size = args.batch_size
-    betas = args.betas
-    lr = args.lr
-    if len(betas) != 2: raise Exception(f'Wrong values of betas. You must provide two values, you provided {len(betas)}')
-
-    stranded = args.stranded
-    features_fragments_selection = args.features_fragments_selection
-
-    #############
-    # 2. Find which dataset we are working on from input directory
-
-    #Define which genome we are working with
-    dataset = ''.join(input_directory).split('/')
-
-    ##possible datsets
-
-    available_datasets = ['SuRE4n', 'SuRE23', 'focused_library', 'mouse']
-
-    dataset_genome = []
-
-    for single_directory in input_directory: #If there's more than one directory
-
-        dataset = single_directory.split('/')
-    
-        dataset_genome_ind = [possible_dataset for possible_dataset in available_datasets if possible_dataset in single_directory]
-        dataset_genome_ind = np.unique(dataset_genome_ind).tolist()
-        if len(dataset_genome_ind) > 1: raise TypeError(f"Error: more than one dataset in a single path {single_directory}")
-
-        #Try to find sub information dependign on dataset
-
-        #if 'mouse' in single_directory and '_sample' not in single_directory: dataset_genome_ind.append([x for x in dataset if '_sample' in x][0])
-
-        if 'thresh' in input_directory: dataset_genome_ind.append([x for x in dataset if 'thresh' in x][0])
-
-        if 'split_' in input_directory: dataset_genome_ind.append([x for x in dataset if 'split_' in x][0]) 
-        
-        dataset_genome.append('_'.join(dataset_genome_ind))
-
-        #Find which subset of feature
-        if 'mouse' not in input_directory: dataset_subgroup = [x for x in dataset if ('intersection' in x or 'TSS' in x)][0]
-        else: dataset_subgroup = '' 
-    
-    dataset_genome = np.unique(dataset_genome).tolist()
-    dataset_genome = '_'.join(dataset_genome)
-
-
-    #############
-    # 3. Create output directory
-
-
-    output_directory = os.path.join(out_dir, args.type_model, dataset_genome, dataset_subgroup, cell_line,
-                                    features_fragments_selection, f'strand_{str(stranded)}',
-                                    args.training_model if args.training_model else '')
-
-    # Add possible extensions that the output directory might have
-
-    ## If the output_directory contains "motif_" term, it means that only motifs of a specific family are going to be studied.
-    if 'motif_' in output_directory:
-        motif_or_family = (args.type_model).replace('motif_', '')
-        print(f'Motif or family {motif_or_family} being studied', flush=True)
-
-    ## If model_directory is diferent than False, it means that weights are going to be loaded from a previous model
-    pretrained_directory = model_directory
-    if model_directory:
-        print(f' Pretrained directory used in: {pretrained_directory}')
-        output_directory = os.path.join(output_directory, 'pretrained')
-
-
-    ##If output direcotry already exists, create different trial directories
-    if os.path.exists(output_directory):
-        for i in range(2,100):
-            trial_directory = os.path.join(output_directory, 'trial_'+str(i))
-            if not os.path.exists(trial_directory):
-                output_directory = trial_directory
-                break
-
-    if not os.path.exists(output_directory): os.makedirs(output_directory) #Create folder where all the output is going to be saved
-
-    #All printing functions will be saved in a file
-    f = open(os.path.join(output_directory, 'screen_messages.txt'), 'w')
-
-    print(f' Output directory: {output_directory} \n', flush=True)
-    sys.stdout = f
-
-    print(f' Input Directory {input_directory} \n', flush=True)
-
-    #Check if validation data is in training data
-    error = any(file_validation in input_directory for file_validation in validation_path)
-    if error: raise ValueError('Error: Your validation data is in your trainning data.')
-
-    print(f' Validation Directory {validation_path} \n', flush=True)
-
-    if model_directory:
-        print(f' Pretrained directory used in: {pretrained_directory}')
-
-
-    #############
-    # 4. Run models
-
-    param_model = { 'output_directory' : output_directory,
-                    'input_directory' : args.dir_input,
-                    'pretrained_directory'  : pretrained_directory,
-                    'celltype' : cell_line, 'n_epochs' : n_epochs,
-                    'batch_size' : batch_size, 'betas' : betas, 'lr':lr,
-                    'features_fragments_selection': features_fragments_selection, 
-                    'stranded' : stranded, 'normalization': normalization,
-                    'type_criterion': criterion, 'adaptor':adaptor, 'L_max':L_max,
-                    'scheduler': scheduler,
-                    'weight_decay':weight_decay, 'L_min':L_min, 'validation_path':validation_path}
-
-    #Hyperparameter optimization with optuna
-    if 'tuning' in output_directory:
-
-        objective_args = lambda trial: objective(trial, **param_model)
-
-        print(f'Start study', flush='True')
-        study = optuna.create_study(study_name='CNN_selfattention',direction='minimize') #bayesian optimization
-        study.optimize(objective_args, n_trials=40, show_progress_bar=True)
-
-        pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
-        complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
-
-        print(f"Study statistics: \n"
-            f"  Number of finished trials: {len(study.trials)} \n"
-            f"  Number of pruned trials: {len(pruned_trials)} \n"
-            f"  Number of complete trials: {len(complete_trials)} \n")
-
-        trial = study.best_trial
-        print(f"Best trial: \n"
-              f"  Value: {trial.value} \n"
-              f"  Params: \n")
-        for key, value in trial.params.items():
-            print("    {}: {}".format(key, value))
-
-
-        joblib.dump(study, os.path.join(output_directory,"study.pkl"))
-        importance_hyperparam = optuna.importance.get_param_importances(study)
-
-
-        print(importance_hyperparam)
-
-    else:
-
-        ##########
-        if not downsample:
-            objective(None, **param_model)
-
-        else:
-            min_labelsnoise = 90
-            step = 10
-            max_labelsnoise = 100
-            range_noise = list(range(min_labelsnoise,(max_labelsnoise)+step,step))
-
-            for perc_labels in range_noise:
-                print(f' ############################################# \n', flush=True)
-                print(f' \n Percentage modification {perc_labels} \n', flush=True)
-
-                perc_labels = perc_labels/100
-
-                objective(None, perc_labels = perc_labels, **param_model)
-
-    f.close()
-
-
-
-
-
-if __name__ == '__main__':
-    main()

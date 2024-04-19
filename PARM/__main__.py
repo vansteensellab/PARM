@@ -49,15 +49,7 @@ def main():
 
     # Train task =========================================================================
     # ====================================================================================
-    parser_train = subparsers.add_parser(
-        "train", help="Train a new PARM model from pre-processed MPRA data",
-        description= 'R|' + description,
-    )
-    parser_train.add_argument("data_file", help="Path to the training data file")
-    parser_train.add_argument(
-        "--epochs", type=int, default=10, help="Number of training epochs"
-    )
-    parser_train.set_defaults(func=train)
+    train_subparser(subparsers)
 
     # Predict task =======================================================================
     # ====================================================================================

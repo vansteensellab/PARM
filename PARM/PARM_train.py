@@ -85,6 +85,10 @@ def PARM_train(args):
         "scheduler": scheduler,
         "weight_decay": weight_decay,
         "validation_path": validation_path,
+        "filter_size": args.filter_size,
+        "n_block": args.n_block,
+        "cell_type": args.cell_type,
+        "n_workers": args.n_workers,
     }
 
     objective(None, **param_model)

@@ -288,7 +288,7 @@ def objective(
         ########### TRAINING LOOP
 
         ##Data  generator. Redo in every step so there;s random order
-        y_train_predicted, y_train_true, training_loss = train_loop(
+        _, _, training_loss = train_loop(
             train_dataloader = training_generator,
             model = model,
             criterion = criterion,
@@ -410,9 +410,9 @@ def train_loop(
             X = X.cuda()
             y = y.cuda()
 
-        log("within y.shape", y.shape)
+        log(f"within y.shape {y.shape}")
         pred = model(X)
-        log("within pred.shape", pred.shape)
+        log(f"within pred.shape {pred.shape}")
 
         if batch_ndx % 13 == 0:
             y_train_predicted = np.append(

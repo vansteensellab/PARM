@@ -464,7 +464,7 @@ def train_loop(
     mse = (((y_train_predicted - y_train_true) ** 2) ** (1 / 2)).mean()
 
     log(f"Training Error: Avg loss: {training_loss:>8f}")
-    log(f"                MSE {mse:>3f})
+    log(f"                MSE {mse:>3f}")
     return (y_train_predicted, y_train_true, training_loss)
 
 
@@ -529,7 +529,7 @@ def validation_loop(valid_dataloader, model, criterion, betas):
     mse = (((y_val_predicted - y_val_real) ** 2) ** (1 / 2)).mean()
 
     log(f"Validation Error: Avg loss: {val_loss:>8f}")
-    log(f"                  MSE {mse:>3f})
+    log(f"                  MSE {mse:>3f}")
 
     return (y_val_predicted, y_val_real, val_loss)
 

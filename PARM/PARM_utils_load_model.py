@@ -117,7 +117,7 @@ class ResNet_Attentionpool(nn.Module):
         ##################
         # create stem
         self.stem = nn.Sequential(
-                    nn.Conv1d(vocab, filter_size, stem_kernel_size, padding = "same"),
+                    nn.Conv1d(self.vocab, filter_size, stem_kernel_size, padding = "same"),
                     Residual(ConvBlock(filter_size)),
                     AttentionPool(filter_size, pool_size = 2))
 

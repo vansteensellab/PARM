@@ -32,4 +32,6 @@ setup(name='parm',
     license='GPLv3',
     packages=['PARM'],
     entry_points={"console_scripts": ['parm = PARM.__main__:main']},
-    python_requires='>=3.9')
+    python_requires='>=3.9',
+    install_requires=['torchsummary']
+)

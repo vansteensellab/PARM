@@ -17,16 +17,29 @@ from einops.layers.torch import Rearrange
 import torch.nn.functional as F
 
 
-def load_PARM(weight_file: str):
+def load_PARM(weight_file: str = "_", L_max : int = 600, n_block : int = 5, filter_size : int = 125, train : bool = False):
     """
-    Function to load the PARM model given a weight file
+    Function to load the PARM model given a weight file.
+    Args:
+        weight_file: (str) Path to the weight file (.parm file)
+        L_max: (int) Max length of the sequence
+        n_block: (int) Number of blocks in the ResNet
+        filter_size: (int) Filter size in the ResNet
+        train: (bool) If True, the model is in training mode. If False, the model is in evaluation mode.
+    Returns:
+        model: (nn.Module) PARM model
     """
-    model = ResNet_Attentionpool()
-    model_weights = torch.load(weight_file, map_location=torch.device("cpu"))
-    model.load_state_dict(model_weights)
-    if torch.cuda.is_available():
-        model = model.cuda()
-    model.eval()
+    model = ResNet_Attentionpool(L_max = L_max, n_block = n_block, filter_size = filter_size)
+    if train:
+        if torch.cuda.is_available():
+            model = model.cuda()
+        return model
+    else:
+        model_weights = torch.load(weight_file, map_location=torch.device("cpu"))
+        model.load_state_dict(model_weights)
+        if torch.cuda.is_available():
+            model = model.cuda()
+        model.eval()
     return model
 
 
@@ -86,25 +99,27 @@ class AttentionPool(nn.Module):
 
 
 class ResNet_Attentionpool(nn.Module):
-    def __init__(self):
+
+    def __init__(self, L_max, n_block, 
+                 filter_size = 125):
         super(ResNet_Attentionpool, self).__init__()
 
-        self.L_max = 600
-        self.vocab = 4
-        self.type_loss = "poisson"
+        self.L_max = L_max #Max length of sequence
+        self.vocab = 4 #N nucleotides
+
         kernel_size = 7
         stem_kernel_size = 7
-        self.n_blocks = 5
-        output_nodes = 1
-        filter_size = 125
+
+        self.n_blocks = n_block
+        
+        
 
         ##################
         # create stem
         self.stem = nn.Sequential(
-            nn.Conv1d(self.vocab, filter_size, stem_kernel_size, padding="same"),
-            Residual(ConvBlock(filter_size)),
-            AttentionPool(filter_size, pool_size=2),
-        )
+                    nn.Conv1d(vocab, filter_size, stem_kernel_size, padding = "same"),
+                    Residual(ConvBlock(filter_size)),
+                    AttentionPool(filter_size, pool_size = 2))
 
         # create conv tower
         conv_layers = []
@@ -112,31 +127,36 @@ class ResNet_Attentionpool(nn.Module):
         initial_filter_size = filter_size
         prev_filter_size = filter_size
         for block in range(self.n_blocks):
-            if block > 4:
-                filter_size = int(initial_filter_size * 0.2)
-
-            conv_layers.append(
-                nn.Sequential(
-                    ConvBlock(prev_filter_size, filter_size, kernel_size=kernel_size),
-                    Residual(ConvBlock(filter_size, filter_size, kernel_size=1)),
-                    AttentionPool(filter_size, pool_size=2),
-                )
-            )
-
+            if block > 4: 
+                filter_size = int(initial_filter_size*0.2)
+            
+            conv_layers.append(nn.Sequential(
+                ConvBlock(prev_filter_size, filter_size, kernel_size = kernel_size),
+                Residual(ConvBlock(filter_size, filter_size, kernel_size = 1)),
+                AttentionPool(filter_size, pool_size = 2)))
+            
             prev_filter_size = filter_size
 
         self.conv_tower = nn.Sequential(*conv_layers)
-        self.linear1 = nn.LazyLinear(out_features=output_nodes)
-        self.relu = nn.ReLU()
 
+        self.linear1 = nn.LazyLinear( out_features=1)
+        self.relu = nn.ReLU()
+        
         #################
 
     def forward(self, x):
+
+        
         out = self.stem(x)
+
         out = self.conv_tower(out)
+
         out = torch.max(out, dim=-1).values
+
         out = out.view(out.size(0), -1)
+        
         out = self.linear1(out)
+
         out = self.relu(out)
 
         return out

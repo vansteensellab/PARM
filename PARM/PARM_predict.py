@@ -21,19 +21,24 @@ from .PARM_misc import log
 from tqdm import tqdm
 
 
-def PARM_predict(input, output, model_weights, parm_version):
+def PARM_predict(input, output, model_weights):
     """
     Reads the input fasta file and predicts promoter activity scores using the PARM models.
     Writes the output as tab-separated values.
+    Args:
+        input: (str) Path to input fasta file
+        output: (str) Path to output file
+        model_weights: (list) List of paths to model weights
+        
     """
     # Load models
-    log("Loading models", parm_version)
+    log("Loading models")
     complete_models = dict()
     for model_weight in model_weights:
         model_name = os.path.basename(model_weight).split(".")[0]
         complete_models["prediction_" + model_name] = load_PARM(model_weight)
     # Iterate over sequences and predict scores
-    log("Making predictions", parm_version)
+    log("Making predictions")
     total_interactions = sum(1 for _ in SeqIO.parse(input, "fasta")) * len(
         complete_models
     )
@@ -51,7 +56,7 @@ def PARM_predict(input, output, model_weights, parm_version):
         output_df = pd.concat([output_df, tmp], axis=0, ignore_index=True)
     # Write output
     pbar.close()
-    log("Writing output file", parm_version)
+    log("Writing output file")
     output_df.to_csv(output, sep="\t", index=False)
 
 

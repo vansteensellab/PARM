@@ -11,7 +11,8 @@ details. You should have received a copy of the GNU General Public License along
 If not, see <http://www.gnu.org/licenses/>.
 """
 
+from .version import __version__
 
-def log(message, version):
-    v = 'PARM v' + version
+def log(message):
+    v = 'PARM v' + __version__
     print(f"[{v}] {message}", flush=True)

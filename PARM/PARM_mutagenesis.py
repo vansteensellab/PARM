@@ -42,22 +42,22 @@ def PARM_mutagenesis(
     """
     parm_scores = dict()
     # Loading motif database
-    log("Loading motif database", parm_version)
-    PFM_hocomoco_dict, _, ICT_hocomoco_dict = dict_jaspar(
+    log("Loading motif database")
+    PFM_hocomoco_dict, _, _ = dict_jaspar(
         file=motif_database, reverse=True
     )
     # Loading models
     complete_models = dict()
     for model in model_weights:
         model_name = os.path.basename(model).split(".parm")[0]
-        log(f"Loading model {model_name}", parm_version)
+        log(f"Loading model {model_name}")
         complete_models[model_name] = load_PARM(model)
         parm_scores[model_name] = dict()
 
     # ====================================================================================
     # Parsing the fasta file =============================================================
     # ====================================================================================
-    log("Computing saturation mutagenesis", parm_version)
+    log("Computing saturation mutagenesis")
     total_interactions = len(list(SeqIO.parse(input, "fasta"))) * len(model_weights)
     pbar = tqdm(total=total_interactions, ncols=80)
     for record in SeqIO.parse(input, "fasta"):
@@ -1280,17 +1280,16 @@ def PARM_plot_mutagenesis(
     correlation_threshold: float,
     attribution_threshold: float,
     plot_format: str,
-    parm_version: str,
     output_directory: os.path = None,
     attribution_range: list = None,
 ):
-    log("Reading input directory", parm_version)
+    log("Reading input directory")
     input_directory = Path(input)
     plot_extension = "." + plot_format
     total_input_files = len(
         ["_" for _ in input_directory.rglob("mutagenesis_*.txt.gz")]
     )
-    log("Plotting data", parm_version)
+    log("Plotting data")
     pbar = tqdm(total=total_input_files, ncols=80)
     for this_file in input_directory.rglob("mutagenesis_*.txt.gz"):
         file_name = this_file.name

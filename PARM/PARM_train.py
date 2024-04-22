@@ -17,8 +17,9 @@ from .PARM_utils_data_loader import (
     h5_dataset,
     gradual_warmup_scheduler,
 )
+from .PARM_misc import log
 
-log(f"\n Cuda working? {torch.cuda.is_available()})
+log(f"\n Cuda working? {torch.cuda.is_available()}")
 
 
 def PARM_train(args):
@@ -58,10 +59,10 @@ def PARM_train(args):
     # All loging functions will be saved in a file
     f = open(os.path.join(output_directory, "log.txt"), "w")
 
-    log(f" Output directory: {output_directory})
+    log(f" Output directory: {output_directory}")
     sys.stdout = f
 
-    log(f" Input Directory {input_directory})
+    log(f" Input Directory {input_directory}")
 
     # Check if validation data is in training data
     error = any(
@@ -70,7 +71,7 @@ def PARM_train(args):
     if error:
         raise ValueError("Error: Your validation data is in your trainning data.")
 
-    log(f" Validation Directory {validation_path})
+    log(f" Validation Directory {validation_path}")
 
     #############
     # 4. Run models
@@ -531,3 +532,77 @@ def validation_loop(valid_dataloader, model, criterion, betas):
     log(f"                  MSE {mse:>3f})
 
     return (y_val_predicted, y_val_real, val_loss)
+
+
+
+def validation_loop(valid_dataloader, model, output_directory, betas, cell_line:str):
+    """
+    Validation loop.
+    Args:
+        valid_dataloader:
+        model:
+        criterion:
+        output_directory: (str) Output directory.
+        cell_line: (str) Cell lines used to train and predict, if more than one separate by "_" e.g. K562_HEPG2
+    
+    Returns:
+        y_val_predicted: (np.array) Fragment predictions
+        y_valid_true: (np.array) Measured SuRE score, matching fragments with the one in y_train_predicted
+        valid_loss: (float) Loss performance of epoch.
+    """
+
+    
+    n_cels = len(cell_line.split('__'))
+    y_val_predicted, y_val_real = np.empty((0,n_cels)), np.empty((0,n_cels))
+
+    model.eval()
+
+    val_loss = 0.0
+
+
+    with torch.no_grad():
+        for batch_ndx, (X, y) in enumerate(valid_dataloader):
+
+            X = X.permute(0,2,1)
+            y = torch.flatten(y, 1, 2)
+
+
+            if torch.cuda.is_available():
+                X = X.cuda()
+                y = y.cuda()
+
+            pred = model(X)
+
+            if batch_ndx % 5 == 0:
+                y_val_predicted = np.append(y_val_predicted, pred.cpu().detach().numpy(), axis=0)
+                y_val_real = np.append(y_val_real, y.cpu().detach().numpy(), axis=0)
+
+            
+
+
+            if betas[0] != 0 or betas[1] != 0:
+
+                l2_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
+
+                l1_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
+
+                loss = criterion(pred, y)  + l2_norm*betas[1] + l1_norm*betas[0]
+
+            else:
+                loss = criterion(pred, y)
+
+
+            # Backpropagation
+
+            val_loss += loss.item()
+
+
+    val_loss /= (batch_ndx)
+    mse = (((y_val_predicted-y_val_real)**2)**(1/2)).mean()
+
+
+    log(f"Validation Error: Avg loss: {val_loss:>8f}")
+    log(f"                  MSE {mse:>3f}")
+    
+    return(y_val_predicted, y_val_real, val_loss)
+

@@ -86,7 +86,7 @@ def PARM_train(args):
         "weight_decay": weight_decay,
         "validation_path": validation_path,
         "filter_size": args.filter_size,
-        "n_block": args.n_block,
+        "n_block": args.n_blocks,
         "cell_type": args.cell_type,
         "n_workers": args.n_workers,
     }

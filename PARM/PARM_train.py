@@ -209,7 +209,7 @@ def objective(
     for i, directory in enumerate(input_directory):
         training_set = h5_dataset(path=directory, celltype=cell_type)
 
-        index_train_ind = np.arrange(len(training_set))
+        index_train_ind = np.arange(len(training_set))
 
         index_dataset_train = np.append(
             index_dataset_train,
@@ -240,7 +240,7 @@ def objective(
     for i, directory in enumerate(validation_path):
         validation_set = h5_dataset(path=validation_path, celltype=cell_type)
 
-        index_valid_ind = np.arrange(len(validation_set))
+        index_valid_ind = np.arange(len(validation_set))
 
         index_dataset_valid = np.append(
             index_dataset_valid,

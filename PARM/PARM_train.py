@@ -25,13 +25,13 @@ log(f"\n Cuda working? {torch.cuda.is_available()}")
 def PARM_train(args):
     #############
     # 1. Load arguments
-    input_directory = args.dir_input
-    output_directory = args.out_dir
+    input_directory = args.input
+    output_directory = args.output
     adaptor = args.adaptor
     L_max = args.L_max
     scheduler = args.scheduler
     weight_decay = args.weight_decay
-    validation_path = args.validation_path
+    validation_path = args.validation
     if type(validation_path) != list:
         validation_path = list(validation_path)
 
@@ -44,9 +44,6 @@ def PARM_train(args):
         raise Exception(
             f"Wrong values of betas. You must provide two values, you provided {len(betas)}"
         )
-
-    stranded = args.stranded
-    features_fragments_selection = args.features_fragments_selection
 
     #############
     # 3. Create output directory

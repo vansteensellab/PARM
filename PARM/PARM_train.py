@@ -289,13 +289,12 @@ def objective(
 
         ##Data  generator. Redo in every step so there;s random order
         y_train_predicted, y_train_true, training_loss = train_loop(
-            training_generator,
-            model,
-            criterion,
-            optimizer,
-            scheduler,
-            output_directory,
-            betas,
+            train_dataloader = training_generator,
+            model = model,
+            criterion = criterion,
+            optimizer = optimizer,
+            scheduler = scheduler,
+            betas = betas,
             gradient_clipping=gradient_clipping,
         )
 

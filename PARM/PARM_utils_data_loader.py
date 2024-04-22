@@ -258,7 +258,7 @@ class h5_dataset(torch.utils.data.Dataset):
                         else:
                             raise ValueError(
                                 f"From multiple cell lines, the following one was not present in the dataset {cell}"
-                            s)
+                                )
 
                     file_sure.append(sure_it)
 

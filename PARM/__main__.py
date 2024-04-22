@@ -104,7 +104,7 @@ def train(args):
     print("-" * 80)
     print_arguments("Input", args.input)
     print_arguments("Validation", args.validation)
-    print_arguments("Output", args.out_dir)
+    print_arguments("Output", args.output)
     print_arguments("Cell type", args.cell_type)
     print_arguments("Number of workers", args.n_workers)
     print_arguments("Number of epochs", args.n_epochs)

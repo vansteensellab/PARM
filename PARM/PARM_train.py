@@ -75,7 +75,7 @@ def PARM_train(args):
 
     param_model = {
         "output_directory": output_directory,
-        "input_directory": args.dir_input,
+        "input_directory": args.input,
         "n_epochs": n_epochs,
         "batch_size": batch_size,
         "betas": betas,

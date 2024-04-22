@@ -91,7 +91,7 @@ def PARM_train(args):
         "n_workers": args.n_workers,
     }
 
-    objective(None, **param_model)
+    objective(**param_model)
     f.close()
 
 

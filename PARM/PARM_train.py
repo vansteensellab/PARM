@@ -29,7 +29,7 @@ def PARM_train(args):
     output_directory = args.output
     adaptor = args.adaptor
     L_max = args.L_max
-    scheduler = args.scheduler
+    scheduler = args.cosine_scheduler
     weight_decay = args.weight_decay
     validation_path = args.validation
     if type(validation_path) != list:

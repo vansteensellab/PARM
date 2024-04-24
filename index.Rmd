@@ -1,0 +1,54 @@
+---
+title: "In-silico mutagenesis assay of all human promoters with **PARM**"
+output:
+  html_document:
+    theme: cosmo
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+```
+
+This page contains the pre-computed mutagenesis assay of all human promoters predicted by **PARM**. 
+
+---
+
+Here, you can search for your promoter of interest and get the mutagenesis data for it. After downloading the data, you can visualize it with **PARM** using the `plot` function of the [**PARM** tool](https://github.com/vansteensellab/PARM):
+
+<br>
+<br>
+
+```{r, warning=F, message=F}
+suppressPackageStartupMessages(library(DT))
+suppressPackageStartupMessages(library(dplyr))
+promoters <- 
+    read.table("promoters_with_links.txt", 
+               sep = "\t", header = T) %>%
+    mutate(Link = paste0("<a href=\"https://github.com/vansteensellab/PARM_mutagenesis/raw/main/",
+                         paste(name, chr, start, end, sep="_"), "_strand", strand, ".zip",
+                         "\">Get data</a>"))
+DT::datatable(promoters, escape = FALSE) #,
+#   escape = c(1, 2, 3, 4, 5),
+#   rownames = F,
+#   # filter='top',
+#   extensions = c("Scroller"),
+#   colnames = c(
+#     "Chromosome",
+#     "Start (TSS-250)",
+#     "End (TSS+50)",
+#     "TSS strand",
+#     "Gene Name",
+#     "Gene ID",
+#     "Plot"
+#   ),
+#   options = list(
+#     order = list(list(0, "asc"), list(1, "asc")),
+#     deferRender = TRUE,
+#     scrollY = 1000,
+#     scroller = TRUE,
+#     columnDefs = list(
+#       list(targets = c(2, 3), className = "dt-right"),
+#       list(targets = c(1, 4, 5, 6, 7), className = "dt-center")
+#     )
+
+```

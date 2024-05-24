@@ -22,7 +22,7 @@ git clone git@github.com:vansteensellab/PARM.git
 Then, create the environment with all **PARM**'s requirements:
 
 ```sh
-conda create -n parm -c bioconda -c conda-forge -c nvidia -c pytorch pytorch biopython numpy pandas matplotlib logomaker tqdm seaborn einops -y
+conda create -n parm -c bioconda -c conda-forge -c nvidia -c pytorch pytorch=2.1.1 biopython=1.78 numpy=1.26.4 pandas=2.2.2 matplotlib=3.7.3 logomaker=0.8 tqdm=4.64.0 seaborn=0.13.0 einops=0.4.1 -y
 conda activate parm
 ```
 

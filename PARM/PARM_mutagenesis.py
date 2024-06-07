@@ -1,16 +1,3 @@
-"""
-Copyright 2024 PARM developers
-https://github.com/vansteensellab/PARM
-
-This file is part of PARM. PARM is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by the Free Software Foundation,
-either version 3 of the License, or (at your option) any later version. PARM is distributed
-in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for more
-details. You should have received a copy of the GNU General Public License along with PARM.
-If not, see <http://www.gnu.org/licenses/>.
-"""
-
 import torch
 import numpy as np
 from Bio import SeqIO
@@ -32,7 +19,6 @@ def PARM_mutagenesis(
     input,
     model_weights,
     motif_database,
-    parm_version,
     output_directory,
 ):
     """
@@ -69,8 +55,7 @@ def PARM_mutagenesis(
             )
             if os.path.exists(mutagenesis_data):
                 log(
-                    f"WARNING: mutagenesis data for {sequence_ID} already exist. Skipping...",
-                    parm_version,
+                    f"WARNING: mutagenesis data for {sequence_ID} already exist. Skipping..."
                 )
             else:
                 create_dataframe_mutation_effect(
@@ -1301,14 +1286,12 @@ def PARM_plot_mutagenesis(
         if output_directory is None:
             output_file = os.path.join(
                 file_parent_directory,
-                file_name.replace("mutagenesis_", "")
-                + file_name.replace(".txt.gz", plot_extension),
+                file_name.replace("mutagenesis_", "").replace(".txt.gz", plot_extension),
             )
         else:
             output_file = os.path.join(
                 output_directory,
-                file_name.replace("mutagenesis_", "")
-                + file_name.replace(".txt.gz", plot_extension),
+                file_name.replace("mutagenesis_", "").replace(".txt.gz", plot_extension),
             )
         # Reading input
         mutagenesis_data = pd.read_csv(this_file, compression="gzip", sep="\t")

@@ -9,17 +9,17 @@
 
 # Introduction
 
-PARM (Promoter Activity Regulatory Model) is deep learning model that predicts the promoter activity from DNA sequence itself.
-As a convolution neural network trained on MPRA data, **PARM** is very light-weight and produces predictions in a cell-type specific manner.
+PARM (Promoter Activity Regulatory Model) is a deep learning model that predicts the promoter activity from the DNA sequence itself.
+As a convolution neural network trained on MPRA data, **PARM** is very lightweight and produces predictions in a cell-type-specific manner.
 
-With `**PARM** predict` tool, you can get predictions for any sequence that you want for K562, HepG2, MCF7, LNCaP, or HCT116 cells. 
+With the `PARM predict` tool, you can get predictions for any sequence that you want for K562, HepG2, MCF7, LNCaP, or HCT116 cells. 
 
-With `**PARM** mutagenesis`, in addition to simple promoter activity scores, **PARM** can also produce the so called _in-silico_ mutagenesis plot.
-This is usefull for predicting which TFs are regulating (activating or repressing) your sequence. (read more on [Running _in-silico_ mutagenesis](#running-in-silico-mutagenesis)).
+With `PARM mutagenesis`, in addition to simple promoter activity scores, **PARM** can also produce the so-called _in-silico_ mutagenesis plot.
+This is useful for predicting which TFs are regulating (activating or repressing) your sequence. (read more on [Running _in-silico_ mutagenesis](#running-in-silico-mutagenesis)).
 
 # Installation
 
-> Soon, **PARM** will be available as a bioconda package and these steps won't be necessary. 
+> Soon, **PARM** will be available as a Bioconda package and these steps won't be necessary. 
 
 To install **PARM**, first clone this repository in your machine. Make sure you have conda installed:
 
@@ -69,8 +69,8 @@ parm predict \
   --model pre_trained_models/K562.parm pre_trained_models/HepG2.parm pre_trained_models/LNCaP.parm
 ```
 
-The output is tab-separated file. 
-The first and second columns contain the information about the sequence (the sequence and its header).
+The output is a tab-separated file. 
+The first and second columns contain information about the sequence (the sequence and its header).
 The following column contains the predicted promoter activity for the model you have selected. 
 If you performed predictions for more than one cell, more than one column will be created here.
 
@@ -95,7 +95,7 @@ parm mutagenesis \
   --model pre_trained_models/K562.parm
 ```
 
-You can also run `**PARM** mutagenesis` for more than one cell:
+You can also run `PARM mutagenesis` for more than one cell:
 
 ```sh
 parm mutagenesis \
@@ -104,12 +104,12 @@ parm mutagenesis \
   --model pre_trained_models/K562.parm pre_trained_models/HepG2.parm pre_trained_models/LNCaP.parm
 ```
 
-For every sequence in the input fasta, **PARM** will predict the effect of every possible mutation of every single basepair.
+For every sequence in the input fasta, **PARM** will predict the effect of every possible mutation of every single base pair.
 This result is stored as a matrix, where every row is a nucleotide of the original sequence and the columns are A, C, G, and T; the values in the matrix are the predicted mutation effect.
-**PARM** uses the mutagenesis matrix to scan for known transcription factor (TF) binding-sites. 
-(As default, **PARM** uses the core human database from HOCOOMOCOv11 as the motif datase, but this can be changed with the `--motif_database` parameter.)
+**PARM** uses the mutagenesis matrix to scan for known transcription factor (TF) binding sites. 
+(As default, **PARM** uses the core human database from HOCOOMOCOv11 as the motif dataset, but this can be changed with the `--motif_database` parameter.)
 
-The output of `**PARM** mutagenesis` is a directory where, for every sequence, both the mutagenesis matrix (`mutagenesis_*.txt.gz`) and the scanned TF motifs (`hits_*txt.gz`) are stored.
+The output of `PARM mutagenesis` is a directory where, for every sequence, both the mutagenesis matrix (`mutagenesis_*.txt.gz`) and the scanned TF motifs (`hits_*txt.gz`) are stored.
 
 ## Plotting results of _in-silico_ mutagenesis
 
@@ -119,7 +119,7 @@ Results of _in-silico_ mutagenesis are more insightful when visualized in the fo
 
 Where you can easily see the mutagenesis matrix plus all the scanned TF motifs.
 
-To produce such visualization, you can run:
+To produce such a visualization, you can run:
 
 ```sh
 parm plot \

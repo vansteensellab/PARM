@@ -76,13 +76,12 @@ If you performed predictions for more than one cell, more than one column will b
 
 For the command line above, you should expect the following result:
 
-```
-sequence	header	prediction_K562	prediction_HepG2	prediction_LNCaP
-CTGGGAGG...	CXCR4_chr2:136875708:136875939:-	2.287095785140991	1.4889564514160156	0.2345067262649536
-GCAACTAA...	MED16_chr19:893131:893362:-	2.22406268119812	2.6182565689086914	0.30299943685531616
-ACGCCCAG...	TERT_chr5:1295135:1295366:-	1.993780255317688	1.474591612815857	0.11847741901874542
+| sequence    | header                           | prediction_K562   | prediction_HepG2   | prediction_LNCaP    |
+|-------------|----------------------------------|-------------------|--------------------|---------------------|
+| CTGGGAGG... | CXCR4_chr2:136875708:136875939:- | 2.287095785140991 | 1.4889564514160156 | 0.2345067262649536  |
+| GCAACTAA... | MED16_chr19:893131:893362:-      | 2.22406268119812  | 2.6182565689086914 | 0.30299943685531616 |
+| ACGCCCAG... | TERT_chr5:1295135:1295366:-      | 1.993780255317688 | 1.474591612815857  | 0.11847741901874542 |
 
-```
 
 ## Running _in-silico_ mutagenesis
 

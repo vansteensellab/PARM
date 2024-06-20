@@ -42,7 +42,7 @@ pip install ./PARM
 
 You can now check if everything went fine with:
 ```sh
-PARM -h
+parm -h
 ```
 
 # Usage examples

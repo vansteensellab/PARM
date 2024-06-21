@@ -7,7 +7,6 @@ import optuna
 from sklearn.metrics import r2_score
 from scipy.stats import pearsonr
 import math
-from torchsummary import summary
 import torch
 import torch.nn as nn
 from .PARM_utils_load_model import load_PARM
@@ -169,12 +168,7 @@ def objective(
         model = model.cuda()
         dummybatch = dummybatch.cuda()
 
-    # log(f' ---- MODEL ---- \n'
-    #     f'{model} \n')
-
     _ = model(dummybatch)
-
-    summary(model, (4, L_max))
 
     ################################################
     # Define optimizer

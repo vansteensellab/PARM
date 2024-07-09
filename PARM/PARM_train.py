@@ -18,7 +18,6 @@ from .PARM_utils_data_loader import (
 )
 from .PARM_misc import log
 
-log(f"\n Cuda working? {torch.cuda.is_available()}")
 
 
 def PARM_train(args):
@@ -54,6 +53,8 @@ def PARM_train(args):
 
     # All loging functions will be saved in a file
     f = open(os.path.join(output_directory, "log.txt"), "w")
+    
+    log(f"\n Cuda working? {torch.cuda.is_available()}")
 
     log(f" Output directory: {output_directory}")
     sys.stdout = f

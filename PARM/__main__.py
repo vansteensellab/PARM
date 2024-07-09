@@ -136,10 +136,14 @@ def mutagenesis(args):
     print("{: ^80}".format("Mutagenesis"))
     print("-" * 80)
     models = ",".join(args.model)
-    print_arguments("Model:", models)
-    print_arguments("Input:", args.input)
-    print_arguments("Output:", args.output)
-    print_arguments("Motif database:", args.motif_database)
+    print_arguments("Model", models)
+    print_arguments("Input", args.input)
+    print_arguments("Output", args.output)
+    # check if args.motif_database is the default
+    if args.motif_database == default_motif_db:
+        print_arguments("Motif database", "HOCOMOCOv11 (default)")
+    else:
+        print_arguments("Motif database", args.motif_database)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_mutagenesis(
@@ -160,15 +164,18 @@ def plot(args):
     else:
         out = args.output
     if args.attribution_range is not None:
-        r = " ".join(args.attribution_range)
+        # convert to string just for printing
+        r = ", ".join(args.attribution_range)
+        # Convert to float for the function
+        attribution_range = [float(i) for i in args.attribution_range]
     else:
         r = "None"
-    print_arguments("Input:", args.input)
-    print_arguments("Output:", out)
-    print_arguments("Correlation threshold:", args.correlation_threshold)
-    print_arguments("Attribution threshold:", args.attribution_threshold)
-    print_arguments("Attribution range:", r)
-    print_arguments("Plot format:", args.plot_format)
+    print_arguments("Input", args.input)
+    print_arguments("Output", out)
+    print_arguments("Correlation threshold", args.correlation_threshold)
+    print_arguments("Attribution threshold", args.attribution_threshold)
+    print_arguments("Attribution range", r)
+    print_arguments("Plot format", args.plot_format)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_plot_mutagenesis(
@@ -177,6 +184,7 @@ def plot(args):
         correlation_threshold=args.correlation_threshold,
         attribution_threshold=args.attribution_threshold,
         plot_format=args.plot_format,
+        attribution_range=attribution_range,
     )
 
 
@@ -333,6 +341,7 @@ def train_subparser(subparsers):
         help="Show program's version number and exit",
     )
 
+    
     group.set_defaults(func=train)
 
 
@@ -448,6 +457,10 @@ def mutagenesis_subparser(subparsers):
         help="Show program's version number and exit",
     )
 
+
+    global default_motif_db
+    default_motif_db = optional_arguments.get_default("motif_database")
+    
     group.set_defaults(func=mutagenesis)
 
 

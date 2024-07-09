@@ -1289,6 +1289,8 @@ def PARM_plot_mutagenesis(
                 file_name.replace("mutagenesis_", "").replace(".txt.gz", plot_extension),
             )
         else:
+            # create output directory 
+            os.makedirs(output_directory, exist_ok=True)
             output_file = os.path.join(
                 output_directory,
                 file_name.replace("mutagenesis_", "").replace(".txt.gz", plot_extension),
@@ -1903,8 +1905,8 @@ def plot_mutagenesis(
             center=0,
             xticklabels=10,
             cbar=False,
-            vmin=plot_promoter.min(axis=None).min(),
-            vmax=plot_promoter.max(axis=None).max(),
+            vmin=plot_promoter.min(axis=None),
+            vmax=plot_promoter.max(axis=None),
             mask=mask,
         )
 

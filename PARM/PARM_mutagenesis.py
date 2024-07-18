@@ -10,28 +10,48 @@ from .PARM_utils_load_model import load_PARM
 from .PARM_misc import log
 from tqdm import tqdm
 from matplotlib import pyplot as plt, colors
+import matplotlib
 import logomaker
 import seaborn as sns
 from pathlib import Path
 
 
 def PARM_mutagenesis(
-    input,
-    model_weights,
-    motif_database,
-    output_directory,
+    input: str,
+    model_weights: list,
+    motif_database: str,
+    output_directory: str,
 ):
     """
-    Reads the input fasta file and computes the mutagenesis using the PARM models.
+    Function to execute the in-silico mutageesis of a sequence using the PARM models.
+
     For each sequence in the fasta, it writes three outputs: the mutagenesis matrix,
-    the motif hits, and the pdf plot of the assay.
+    the motif hits.
+
+    Parameters
+    ----------
+    input : str
+        Path to the input fasta file.
+    model_weights : list
+        List of paths to the PARM models. This should be a list even if there's only one model.
+    motif_database : str
+        Path to the motif database. Usually this is the HOCOMOCO database.
+    output_directory : str
+        Path to the output directory where the results will be saved.
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    >>> PARM_mutagenesis("input.fasta", ["model1.parm", "model2.parm"], "motif_database.txt", "output")
+
     """
     parm_scores = dict()
     # Loading motif database
     log("Loading motif database")
-    PFM_hocomoco_dict, _, _ = dict_jaspar(
-        file=motif_database, reverse=True
-    )
+    PFM_hocomoco_dict, _, _ = dict_jaspar(file=motif_database, reverse=True)
     # Loading models
     complete_models = dict()
     for model in model_weights:
@@ -90,19 +110,31 @@ def PARM_mutagenesis(
 
 
 def dict_jaspar(
-    file="https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
-    reverse=False,
+    file: str = "https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
+    reverse: bool = False,
 ):
     """
     Load all hocomoco motifs in a dictionary format from jaspar file.
-    Args:
-        file: (str) Path to jaspar file containg motifs of interest, either http file or file in folder
-        reverse: (bool) If True, adds also reverse complementary of all motifs.
 
-    Returns:
-        PFM_hocomoco_dict: (dict) PFM in np.array of all motifs. Name of motifs as keys.
-        consensus_hocomoco_dict: (dict) Consensus sequence in str of all motifs. Name of motifs as keys.
-        ICT_hocomoco_dict: (dict) ICT in np.array of all motifs. Name of motifs as keys.
+    Parameters
+    ----------
+    file : str
+        Path to the motif database. Usually this is the HOCOMOCO database.
+    reverse : bool
+        If True, the reverse complement of the motif will be computed.
+
+    Returns
+    -------
+    PFM_hocomoco_dict : dict
+        Dictionary with the PFM of the motifs.
+    consensus_hocomoco_dict : dict
+        Dictionary with the consensus sequence of the motifs. Keys are the motif names.
+    ICT_hocomoco_dict : dict
+        Dictionary with the Information Content of the motifs. Keys are the motif names.
+
+    Examples
+    --------
+    >>> PFM_hocomoco_dict, consensus_hocomoco_dict, ICT_hocomoco_dict = dict_jaspar("motif_database.txt", reverse=True)
     """
 
     if "https" in file:
@@ -157,9 +189,29 @@ def dict_jaspar(
     return (PFM_hocomoco_dict, consensus_hocomoco_dict, ICT_hocomoco_dict)
 
 
-def predict_fragments(seq, L_max, completemodel):
+def predict_fragments(seq: str, L_max: int, completemodel: torch.nn.Module):
     """
-    Predicts sure score for input fragment
+    Predicts the promoter activity score for input fragment
+    Converts the sequence to one hot and then predicts the score.
+
+    Parameters
+    ----------
+    seq : str
+        Sequence to predict.
+    L_max : int
+        Max length of sequence. Necessary for padding.
+    completemodel : torch.nn.Module
+        Model used to compute attributions.
+
+    Returns
+    -------
+    score : float
+        Predicted score for that sequence.
+
+    Examples
+    --------
+    >>> predict_fragments("ATCG", 600, model)
+
     """
     if torch.cuda.is_available():
         completemodel = completemodel.cuda()
@@ -170,22 +222,36 @@ def predict_fragments(seq, L_max, completemodel):
     if torch.cuda.is_available():
         onehot_fragment = onehot_fragment.cuda()
 
-    sure_score = completemodel(onehot_fragment).item()
+    score = completemodel(onehot_fragment).item()
 
-    return sure_score
+    return score
 
 
-def get_one_hot(Seqs, L_max, padding="middle", padding_value=0):
+def get_one_hot(
+    Seqs: list, L_max: int, padding: str = "middle", padding_value: int = 0
+):
     """
     Transform list of sequences to one hot.
-    Args:
-        Seqs: (list) of string sequences
-        L_max: (int) Max length of sequences. Relevant for padding.
-        padding: (str) Type of padding, only 3 possible (left, middle, right). (default: middle)
-        padding_value: (int or float) Value to pad with. (default: 0)
 
-    Returns:
-        X_OneHot: (np.array) Array with length (samples, L_max, 4)
+    Parameters
+    ----------
+    Seqs : list
+        List of string sequences. This should be a list even if there's only one sequence.
+    L_max : int
+        Max length of sequences. Sequences smaller than this will be padded.
+    padding : str
+        Padding type. Options are 'middle', 'right', 'left'.
+    padding_value : int
+        Value to pad the sequences.
+
+    Returns
+    -------
+    X_OneHot : np.array
+        One-hot enconded array with shape (samples, L_max, 4).
+
+    Examples
+    --------
+    >>> get_one_hot(["ATCG"], 600)
     """
     # Define nucleotide to vector
     letter2vector = {
@@ -228,16 +294,16 @@ def get_one_hot(Seqs, L_max, padding="middle", padding_value=0):
 
 
 def motif_attribution(
-    seq,
-    L_max,
-    start_motif,
-    end_motif,
-    completemodel,
-    ref_to_alt_attribution=False,
-    return_reference_score=False,
-    index_output=0,
-    alt_nt=["A", "C", "G", "T"],
-    window_del=False,
+    seq: str,
+    L_max: int,
+    start_motif: int,
+    end_motif: int,
+    completemodel: torch.nn.Module,
+    ref_to_alt_attribution: bool = False,
+    return_reference_score: bool = False,
+    index_output: int = 0,
+    alt_nt: list = ["A", "C", "G", "T"],
+    window_del: bool = False,
 ):
     """
     Computes saturation mutagenesis of a given region of a sequence (or the complete one) to determine
@@ -245,25 +311,45 @@ def motif_attribution(
 
     Basically it mutates every base to every other possible base.
 
-    If ref_to_alt_attribution == False: The importance of each base is determined by the SuRE score of that base - the mean SuRE score of the other possible 3 bases.
+    If ref_to_alt_attribution == False: The importance of each base is determined by the score of that base - the mean score of the other possible 3 bases.
 
-    If ref_to_alt_attribution == True: The importance of each base is determined by the REF - SuRE score of that base.
+    If ref_to_alt_attribution == True: The importance of each base is determined by the REF - score of that base.
 
 
-     Args:
-       seq: (str or list) sequence(s) to study
-       L_max: (int) input length sequence of the model. Necessary for padding.
-       start_motif: (int or list) start of the motif of interest, relative to seq. If list, it should have the same length as seq. All motifs must  to have the same length.
-       end_motif: (int) end of the motif of interest, relative to seq.  If list, it should have the same length as seq. All motifs in the different sequences must to have the same length.
-       completemodel: (fun) model used to compute attributions
-       return_reference_score: (bool) If True, returns prediction of Reference sequence as well as att
-       index_output: (int) Which index of the output to take, usuallydistribution if the model only outputs one cell line and/or replicates there's only one output value and index is 0.
-       alt_nt: (list of str) List of possible nucleotides to mutate to in a list. --> ['A']
-       window_del: (list of int) If it is not False, provide a list of integer(s) e.g. [1], or [1,2]. It will compute the effect of a deletion of the different sizes provided in the list.
+    Parameters
+    ----------
+    seq : str or list
+        Sequence (str) or list of sequences to study.
+    L_max : int
+        Input length sequence of the model. Necessary for padding.
+    start_motif : int
+        Start of the motif of interest, relative to seq.
+    end_motif : int
+        End of the motif of interest, relative to seq.
+    completemodel : torch.nn.Module
+        Model used to compute attributions.
+    ref_to_alt_attribution : bool
+        If True, the importance of each base is determined by the REF - score of that base.
+    return_reference_score : bool
+        If True, returns the prediction of the reference sequence.
+    index_output : int
+        Which index of the output to take, usually if the model only outputs one cell line and/or replicates there's only one output value and index is 0.
+    alt_nt : list
+        List of possible nucleotides to mutate to in a list. --> ['A']
+    window_del : bool
+        If it is not False, provide a list of integer(s) e.g. [1], or [1,2]. It will compute the effect of a deletion of the different sizes provided in the list.
 
-     Returns:
-       att: (np.array) array of shape (idx_output, n_sequences, n_bases, length_motif) if any of this dimensions is one, it will be removed.
+    Returns
+    -------
+    att : torch.Tensor
+        Array of shape (n_bases, length_motif).
+    ref_score : int
+        Returns prediction of Reference Sequence.
 
+    Examples
+    --------
+    >>> seq = "AGCTAGCTAGCTAGCTTAGC"
+    >>> motif_attribution(seq, 600, 0, 4, model)
     """
 
     # If seq is a list, we have multiple sequences or index ouputs
@@ -412,7 +498,12 @@ def motif_attribution(
     return att
 
 
-def peaks_scanning(attribution, length_peaks=5, number_vocab=4, append=True):
+def peaks_scanning(
+    attribution: np.array,
+    length_peaks: int = 5,
+    number_vocab: int = 4,
+    append: bool = True,
+):
     """
     Finds four different types of peaks:
         (1) Gain_of_activator: Only one possible mutation (e.g. A-->T) has a effect on having HIGHER promoter activity, not the other possible mutations or the surronding nucleotides.
@@ -421,16 +512,27 @@ def peaks_scanning(attribution, length_peaks=5, number_vocab=4, append=True):
         (4) Loss_of_repressor: All possible mutations (e.g. A-->T,C,G) has a effect on having HIGHER promoter activity, as well as the mutations around  that base.
 
 
-    Args:
-        attribution: (np.array) Attribution matrix of size nucleotides X length_sequence
-        length_peaks: (int) Length of the peaks that are going to be scanned (~motif length)
-        number_vocab: (int) number of vocabulary, essentially number of nucleotides (default: 4)
-        append: (bool) if True, then in the attribution_seq a matrix of (4,5) is appended on the end and start of the sequence.
-                                In this way it allows for motifs scanning to also find hits in the edges.
-
+    Parameters
+    ----------
+    attribution : np.array
+        Array of shape (n_bases, length_motif).
+    length_peaks : int
+        Length of the peaks.
+    number_vocab : int
+        Number of possible nucleotides.
+    append : bool
+        If True, the peaks will be appended with zeros.
+        
+    Returns
+    -------
+    dict_scores : dict
+        Dictionary with the scores of the peaks.
+        
+    Examples
+    --------
+    >>> peaks_scanning(attribution, 5, 4, True)
 
     """
-    from itertools import permutations
 
     if append:
         zeros_padding = np.zeros(shape=(4, 5))
@@ -591,14 +693,14 @@ def peaks_scanning(attribution, length_peaks=5, number_vocab=4, append=True):
 
 
 def compute_attribution(
-    seq,
-    L_max,
-    start_motif,
-    end_motif,
-    completemodel,
-    index_output=0,
-    alt_nt=["A", "C", "G", "T"],
-    window_del=False,
+    seq: str,
+    L_max : int,
+    start_motif : int,
+    end_motif : int,
+    completemodel : torch.nn.Module,
+    index_output : int = 0,
+    alt_nt : list = ["A", "C", "G", "T"],
+    window_del : bool = False,
 ):
     """
     Computes saturation mutagenesis of a given region of a sequence (or the complete one) to determine
@@ -606,19 +708,34 @@ def compute_attribution(
 
     Basically it mutates every base to every other possible base. The importance of each base
     is determined by the SuRE score of that base - the mean SuRE score of the other possible 3 bases.
-     Args:
-       seq: (str or list) sequence (str) or list of sequences to study
-       L_max: (int) input length sequence of the model. Necessary for padding.
-       start_motif: (int) start of the motif of interest, relative to seq.
-       end_motif: (int) end of the motif of interest, relative to seq.
-       completemodel: (fun) model used to compute attributions
-       index_output: (int) Which index of the output to take, usually if the model only outputs one cell line and/or replicates there's only one output value and index is 0.
-       alt_nt: (list of str) List of possible nucleotides to mutate to in a list. --> ['A']
-       window_del: (list of int) If it is not False, provide a list of integer(s) e.g. [1], or [1,2]. It will compute the effect of a deletion of the different sizes provided in the list.
+    
+    Parameters
+    ----------
+    seq : str
+        Sequence to study.
+    L_max : int
+        Input length sequence of the model. Necessary for padding.
+    start_motif : int
+        Start of the motif of interest, relative to seq.
+    end_motif : int
+        End of the motif of interest, relative to seq.
+    completemodel : torch.nn.Module
+        Model used to compute attributions.
+    index_output : int
+        Which index of the output to take, usually if the model only outputs one cell line and/or replicates there's only one output value and index is 0.
+    alt_nt : list
+        List of possible nucleotides to mutate to in a list. --> ['A']
+    window_del : bool
+        If it is not False, provide a list of integer(s) e.g. [1], or [1,2]. It will compute the effect of a deletion of the different sizes provided in the list.
 
-     Returns:
-       att: (torch.Tensor) array of shape (n_bases, length_motif)
-       ref_score: (int) Returns prediction of Reference Sequence.
+    Returns
+    -------
+    att : torch.Tensor
+        Array of shape (n_bases, length_motif).
+        
+    Examples
+    --------
+    >>> compute_attribution("ATCG", 600, 0, 4, model)
 
     """
 
@@ -639,20 +756,34 @@ def compute_attribution(
 
 
 def compute_correlation_between_motifs(
-    pfm, motif_attribution, ICM=False, return_PFM=False
+    pfm : np.array,
+    motif_attribution : np.array, 
+    ICM : np.array = False, 
+    return_PFM : bool = False
 ):
     """
     Normalizes motif attribution defined by model, and computes correlation
     between known PFM and normalized motif attribution.
 
-     Args:
-        pfm: (np.array) known PFM
-        motif_attribution: (np.array) attribution computed for a motif (bases, length motif)
-        return_PFM: (boolean) if True return the normalized motif_attribution
-
-     Returns:
-       rho: (float) corrlation between known PSSM and attribution PSMM
-
+    Parameters
+    ----------
+    pfm : np.array
+        The PFM matrix of the motif database.
+    motif_attribution : np.array
+        The attribution scores of the motif.
+    ICM : np.array
+        The Information Content Matrix of the motif database.
+    return_PFM : bool
+        If True, returns the PFM of the motif.
+        
+    Returns
+    -------
+    rho_prob : float
+        Correlation score between known PFM and the one of the attribution scores.
+        
+    Examples
+    --------
+    >>> compute_correlation_between_motifs(pfm, motif_attribution, ICM, True)
     """
     ## Compute the correlation score between known PPM and the one of the attribution scores
 
@@ -732,33 +863,48 @@ def compute_correlation_between_motifs(
 
 
 def run_motif_scanning(
-    known_PFM,
-    attribution_seq,
-    threshold=0.6,
-    attribution=False,
-    append=True,
-    multiple_one_hot=False,
-    normalize=False,
-    split_pos_neg=False,
-    cutoff_att=0.001,
+    known_PFM : dict,
+    attribution_seq : np.array,
+    threshold : float = 0.6,
+    attribution : bool = False,
+    append : bool = True,
+    multiple_one_hot : bool = False,
+    normalize : bool = False,
+    split_pos_neg : bool = False,
+    cutoff_att : float = 0.001,
 ):
     """
-    Slides through sequence, computes attribution and then check which motifs and where have a high correlation.
+    Parameters
+    ----------
+    known_PFM : dict
+        Dict of known PFM with name of PFM as keys, optionally can also be used IC instead of PFM.
+    attribution_seq : np.array
+        Array showing attribution of sequence obtained from in silico mutagenesis.
+    threshold : float, optional
+        Threshold to consider a good match between known TFBS and computed attribution. (default is 0.6)
+    attribution : bool, optional
+        If true returns as an extra column the mean attribution * PFM of that hit. (default is False)
+    append : bool, optional
+        If True, then in the attribution_seq a matrix of (4,5) is appended on the end and start of the sequence.
+        In this way it allows for motifs scanning to also find hits in the edges. (default is True)
+    multiple_one_hot : bool, optional
+        If not False, provide one-hot encoded sequence, and the scanning will be done with the normalized sequence*one_hot.
+    normalize : bool, optional
+        If normalize each base to add up to 1. If IC instead of PFM provided we recommend to not use it. (default is False)
+    split_pos_neg : bool, optional
+        If True, split the attribution between negative and positive values. (default is False)
+    cutoff_att : float, optional
+        Cutoff value for small attributions. (default is 0.001)
 
-    Args:
-        known_PFM: (dict) dict of known PFM with name of PFM as keys, optionally can also be used IC instead of PFM.
-        attribution_seq: (np.array) Array showing attribution of sequence obtained from in silico mutagenesis.
-        attribution: (bool) If true returns as an extra column the mean attribution * PFM of that hit.
-        threshold: (float) Threshold to consider a good match between known TFBS and computed attribution.
-        append: (bool) if True, then in the attribution_seq a matrix of (4,5) is appended on the end and start of the sequence.
-                                In this way it allows for motifs scanning to also find hits in the edges.
-        multiple_one_hot (np.array): If not False, provide one-hot encoded sequence, and the scanning will be done with the normalized sequence*one_hot.
-        normalize: (bool) If normalize each base to add up to 1. If IC instead of PFM provided we recommend to not use it.
-        split_pos_neg: (bool) If True, split the attribution between negative and positive values.
-
-    Returns:
-        hits: (list) Hits of list that contains [motif_name, correlation, start_hit, end_hit]
-
+    Returns
+    -------
+    hits : list
+        Hits of list that contains [motif_name, correlation, start_hit, end_hit]
+        
+    Examples
+    --------
+    >>> run_motif_scanning(known_PFM, attribution_seq, 0.6, False, True, False, False, 0.001)
+        
     """
 
     if append:
@@ -993,20 +1139,33 @@ def run_motif_scanning(
 
 
 def slide_through_attribution_and_PFM_fast(
-    known_PFM, attribution_seq, append=True, cutoff_att=0.001
+    known_PFM : dict, 
+    attribution_seq : np.array, 
+    append : bool = True, 
+    cutoff_att : float = 0.001
 ):
     """
     Slides through sequence, computes attribution and then check which motifs and where have a high correlation.
 
-    Args:
-        known_PFM: (dict) dict of known PFM with name of PFM as keys, optionally can also be used IC instead of PFM.
-        attribution_seq: (np.array) Array showing attribution of sequence obtained from in silico mutagenesis.
-        append: (bool) if True, then in the attribution_seq a matrix of (4,5) is appended on the end and start of the sequence.
-                                In this way it allows for motifs scanning to also find hits in the edges.
-
-    Returns:
-        hits: (list) Hits of list that contains [motif_name, correlation, start_hit, end_hit]
-
+    Parameters
+    ----------
+    known_PFM : dict
+        Dict of known PFM with name of PFM as keys, optionally can also be used IC instead of PFM.
+    attribution_seq : np.array
+        Array showing attribution of sequence obtained from in silico mutagenesis.
+    append : bool
+        If True, the peaks will be appended with zeros.
+    cutoff_att : float
+        Cutoff value for small attributions.
+        
+    Returns
+    -------
+    hits : pd.DataFrame
+        Hits of list that contains [motif_name, correlation, start_hit, att_abs_sum, length_motif]
+        
+    Examples
+    --------
+    >>> slide_through_attribution_and_PFM_fast(known_PFM, attribution_seq, True, 0.001)
     """
 
     if append:
@@ -1078,21 +1237,36 @@ def slide_through_attribution_and_PFM_fast(
 
 
 def conv_with_PFM_slide_through_attribution(
-    known_PFM, attribution_seq, multiple_one_hot=False, normalize=False, sequence=False
+    known_PFM : dict, 
+    attribution_seq : np.array, 
+    multiple_one_hot : np.array = False, 
+    normalize : bool = False, 
+    sequence : bool = False
 ):
     """
     Slides through sequence of attribution and then computes convolution for each given motif.
 
-    Args:
-        known_PFM: (dict) dict of known PFM with name of PFM as keys, optionally can also be used IC instead of PFM.
-        attribution_seq: (np.array) Array showing attribution of sequence obtained from in silico mutagenesis.
-        multiple_one_hot (np.array): If not False, provide one-hot encoded sequence, and the scanning will be done with the normalized sequence*one_hot.
-        normalize: (bool) If normalize each base to add up to 1. If IC instead of PFM provided we recommend to not use it.
-        sequence: (bool) If what is given is the sequence the p_mut_neg is not used
-
-    Returns:
-        hits: (list) Hits of list that contains [motif_name, correlation, start_hit, end_hit]
-
+    Parameters
+    ----------
+    known_PFM : dict
+        Dict of known PFM with name of PFM as keys, optionally can also be used IC instead of PFM.
+    attribution_seq : np.array
+        Array showing attribution of sequence obtained from in silico mutagenesis.
+    multiple_one_hot : np.array
+        If not False, provide one-hot encoded sequence, and the scanning will be done with the normalized sequence*one_hot.
+    normalize : bool
+        If normalize each base to add up to 1. If IC instead of PFM provided we recommend to not use it.
+    sequence : bool
+        If True, the attribution_seq is the sequence itself.
+        
+    Returns
+    -------
+    hits : list
+        Hits of list that contains [motif_name, correlation, start_hit, end_hit]
+        
+    Examples
+    --------
+    >>> conv_with_PFM_slide_through_attribution(known_PFM, attribution_seq, False, False, False)
     """
 
     length_sequence = attribution_seq.shape[-1]
@@ -1261,19 +1435,48 @@ def conv_with_PFM_slide_through_attribution(
 # Plotting =====================================================================
 # ==============================================================================
 def PARM_plot_mutagenesis(
-    input: os.path,
-    correlation_threshold: float,
-    attribution_threshold: float,
-    plot_format: str,
-    output_directory: os.path = None,
-    attribution_range: list = None,
+    input : os.path,
+    correlation_threshold : float,
+    attribution_threshold : float,
+    plot_format : str,
+    output_directory : os.path = None,
+    attribution_range : list = None,
 ):
+    """
+    Generate the plots of the mutagenesis data (produced by PARM_mutagenesis.py).
+    Output is saved in the output directory as an image file.
+    
+    Parameters
+    ----------
+    input : os.path
+        Input directory with the mutagenesis data.
+    correlation_threshold : float
+        Threshold for the correlation of the hits.
+    attribution_threshold : float
+        Threshold for the attribution of the hits.
+    plot_format : str
+        Format of the output plot.
+    output_directory : os.path
+        Output directory for the plots.
+    attribution_range : list
+        Range of the attribution values.
+        
+    Examples
+    --------
+    >>> PARM_plot_mutagenesis(input, 0.5, 0.5, "png", output_directory, [0, 1])
+    """
     log("Reading input directory")
     input_directory = Path(input)
+    # Quit if input directory does not exist
+    if not input_directory.exists():
+        raise NotADirectoryError(f"Input directory {input} does not exist")
     plot_extension = "." + plot_format
     total_input_files = len(
         ["_" for _ in input_directory.rglob("mutagenesis_*.txt.gz")]
     )
+    # Quit if no files found
+    if total_input_files == 0:
+        raise FileNotFoundError("No files found in input directory")
     log("Plotting data")
     pbar = tqdm(total=total_input_files, ncols=80)
     for this_file in input_directory.rglob("mutagenesis_*.txt.gz"):
@@ -1286,14 +1489,18 @@ def PARM_plot_mutagenesis(
         if output_directory is None:
             output_file = os.path.join(
                 file_parent_directory,
-                file_name.replace("mutagenesis_", "").replace(".txt.gz", plot_extension),
+                file_name.replace("mutagenesis_", "").replace(
+                    ".txt.gz", plot_extension
+                ),
             )
         else:
-            # create output directory 
+            # create output directory
             os.makedirs(output_directory, exist_ok=True)
             output_file = os.path.join(
                 output_directory,
-                file_name.replace("mutagenesis_", "").replace(".txt.gz", plot_extension),
+                file_name.replace("mutagenesis_", "").replace(
+                    ".txt.gz", plot_extension
+                ),
             )
         # Reading input
         mutagenesis_data = pd.read_csv(this_file, compression="gzip", sep="\t")
@@ -1308,7 +1515,7 @@ def PARM_plot_mutagenesis(
             TSS_position=0,
             cutoff=0,
             return_fig=False,
-            title="",
+            title=file_name.replace("mutagenesis_", "").replace(".txt.gz", ""),
             hits=hits_data,
             output_file=output_file,
             attribution_range=attribution_range,
@@ -1317,25 +1524,40 @@ def PARM_plot_mutagenesis(
 
 
 def plot_logo(
-    matrix,
-    ax_name,
-    ylabel,
-    colors_base=False,
-    highlight_position=False,
-    fontsize="medium",
-    max_lim=False,
-    min_lim=False,
+    matrix : np.array,
+    ax_name : matplotlib.axis,
+    ylabel : str,
+    colors_base : int = False,
+    highlight_position : int = False,
+    fontsize : str = "medium",
+    max_lim : int = False,
+    min_lim : int = False,
 ):
     """
-    Make plot given axis of DNA sequence importance.
-        matrix (np.array) Importance matrix of sequence
-        ax_name: matplotlib axis
-        ylabel (str): Label on y axis
-        colors_base (bool): If True use Vini's colors
-        highlight_position (False or int): If not False, it will highlight the position indicated. Relative to start of the matrix.
-        max_lim: (int) If not False, set the max limit of the y axis
-        min_lim: (int) If not False, set the min limit of the y axis
-
+    Make plot given axis of DNA sequence importance. This plots the logo of the sequence.
+    
+    Parameters
+    ----------
+    matrix : np.array
+        Importance matrix of sequence.
+    ax_name : matplotlib.axis
+        Axis that the logo should be plot.
+    ylabel : str
+        Label of the y-axis.
+    colors_base : int
+        If True use Vini's colors.
+    highlight_position : int
+        Position to highlight in the logo.
+    fontsize : str
+        Fontsize of the plot.
+    max_lim : int
+        Maximum limit of the plot.
+    min_lim : int
+        Minimum limit of the plot.
+        
+    Examples
+    --------
+    >>> plot_logo(matrix, ax_name, "ylabel", False, False, "medium", False, False)
     """
 
     tf_mut_score_plot = pd.DataFrame(np.transpose(matrix), columns=["A", "C", "G", "T"])
@@ -1371,7 +1593,7 @@ def plot_logo(
 
 
 def find_hits_and_make_logo(
-    matrix,
+    matrix : np.array,
     ax_name,
     known_PFM,
     cutoff=0.8,
@@ -1379,8 +1601,8 @@ def find_hits_and_make_logo(
     best_motif_in_range=10,
     known_ICM=False,
     percentage=0.15,
-    multiple_one_hot=False,
-    hits=None,
+    multiple_one_hot : np.array = False,
+    hits : pd.DataFrame = None,
     fig=None,
     split_pos_neg=False,
 ):
@@ -1888,7 +2110,7 @@ def plot_mutagenesis(
         _ = sns.heatmap(
             plot_promoter.T,
             ax=ax[2, 0],
-            cmap='RdBu',
+            cmap="RdBu",
             center=0,
             xticklabels=10,
             cbar=False,
@@ -1901,7 +2123,7 @@ def plot_mutagenesis(
         _ = sns.heatmap(
             plot_promoter.T,
             ax=ax[2, 0],
-            cmap='RdBu',
+            cmap="RdBu",
             center=0,
             xticklabels=10,
             cbar=False,

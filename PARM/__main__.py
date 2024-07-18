@@ -169,6 +169,7 @@ def plot(args):
         # Convert to float for the function
         attribution_range = [float(i) for i in args.attribution_range]
     else:
+        attribution_range = None
         r = "None"
     print_arguments("Input", args.input)
     print_arguments("Output", out)
@@ -541,8 +542,11 @@ def plot_subparser(subparsers):
 def bye_message():
     return (
         "\nAll done!\n"
-        "If you make use of PARM in your research, please cite:\n"
-        "...............\n"
+        "If you make use of PARM in your research, please cite:\n\n"
+        "  Barbadilla-Martínez L., Klaassen N.H., Franceschini-Santos V.H, et. al. (2024) \n"
+        "  The regulatory grammar of human promoters uncovered by MPRA-trained deep learning. \n"
+        "  bioRXiv. https://doi.org/10.1101/2024.07.09.602649\n"
+        "\n"
         ""
     )
 

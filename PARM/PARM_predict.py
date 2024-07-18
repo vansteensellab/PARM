@@ -9,15 +9,29 @@ from .PARM_misc import log
 from tqdm import tqdm
 
 
-def PARM_predict(input, output, model_weights):
+def PARM_predict(input : str,
+                 output : str, 
+                 model_weights : list):
     """
-    Reads the input fasta file and predicts promoter activity scores using the PARM models.
-    Writes the output as tab-separated values.
-    Args:
-        input: (str) Path to input fasta file
-        output: (str) Path to output file
-        model_weights: (list) List of paths to model weights
+    Reads the input (fasta file) and predicts promoter activity scores using the PARM models.
+    Writes the output as tab-separated values, where each column is a model and each row is a sequence.
+    
+    Parameters
+    ----------
+    input : str
+        Path to the input fasta file.
+    output : str
+        Path to the output file.
+    model_weights : list
+        List of paths to the PARM model weights. This should be a list even if there is only one model.
         
+    Returns
+    -------
+    None
+    
+    Examples
+    --------
+    >>> PARM_predict("input.fasta", "output.tsv", ["model1.parm", "model2.parm"])
     """
     # Load models
     log("Loading models")

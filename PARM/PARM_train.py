@@ -39,8 +39,8 @@ def PARM_train(args):
     betas = args.betas
     lr = args.lr
     if len(betas) != 2:
-        raise Exception(
-            f"Wrong values of betas. You must provide two values, you provided {len(betas)}"
+        sys.exit(
+            f"Error: Wrong values of betas. You must provide two values, you provided {len(betas)}"
         )
 
     #############
@@ -66,7 +66,7 @@ def PARM_train(args):
         file_validation in input_directory for file_validation in validation_path
     )
     if error:
-        raise ValueError("Error: Your validation data is in your trainning data.")
+        sys.exit("Error: Your validation data is in your trainning data.")
 
     log(f" Validation Directory {validation_path}")
 

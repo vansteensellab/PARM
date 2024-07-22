@@ -14,6 +14,7 @@ import matplotlib
 import logomaker
 import seaborn as sns
 from pathlib import Path
+import sys
 
 
 def PARM_mutagenesis(
@@ -286,7 +287,7 @@ def get_one_hot(
             )
 
         else:
-            raise Exception(f"Padding option not recognised: {padding}")
+            sys.exit(f"Error: Padding option not recognised: {padding}")
 
     X_OneHot = np.array(X_OneHot)
 
@@ -364,10 +365,10 @@ def motif_attribution(
 
     # If the start_motif is a list, it should have the same length as seq
     if len(seq) != len(start_motif) or len(seq) != len(end_motif):
-        raise Exception("Length of start_motif should be the same as the length of seq")
+        sys.exit(f"Error: Length of start_motif should be the same as the length of seq")
     # Check if all motifs have the same length
     if len(set([end_motif[i] - start_motif[i] for i in range(len(seq))])) > 1:
-        raise Exception("All motifs should have the same length")
+        sys.exit(f"Error: All motifs should have the same length")
     size_motifs = end_motif[0] - start_motif[0]
 
     # if thee window_del is not empty, we should also include deletions
@@ -1469,14 +1470,14 @@ def PARM_plot_mutagenesis(
     input_directory = Path(input)
     # Quit if input directory does not exist
     if not input_directory.exists():
-        raise NotADirectoryError(f"Input directory {input} does not exist")
+        sys.exit(f"Error: Input directory {input} does not exist")
     plot_extension = "." + plot_format
     total_input_files = len(
         ["_" for _ in input_directory.rglob("mutagenesis_*.txt.gz")]
     )
     # Quit if no files found
     if total_input_files == 0:
-        raise FileNotFoundError("No files found in input directory")
+        sys.exit(f"Error: No files found in input directory")
     log("Plotting data")
     pbar = tqdm(total=total_input_files, ncols=80)
     for this_file in input_directory.rglob("mutagenesis_*.txt.gz"):
@@ -1600,7 +1601,7 @@ def find_hits_and_make_logo(
     colors_base=True,
     best_motif_in_range=10,
     known_ICM=False,
-    percentage=0.15,
+    min_relative_attribution=0.15,
     multiple_one_hot : np.array = False,
     hits : pd.DataFrame = None,
     fig=None,
@@ -1658,7 +1659,7 @@ def find_hits_and_make_logo(
 
     # Take only hits that their mean attribution is at least 10% of the letter wiht max attribution
 
-    hits = hits[hits.att_x_PFM.abs() > (hits.att_x_PFM.abs().max() * percentage)]
+    hits = hits[hits.att_x_PFM.abs() > (hits.att_x_PFM.abs().max() * min_relative_attribution)]
 
     # Avoid overlapping hits
     hits["rho_abs"] = np.abs(hits.rho)
@@ -1837,9 +1838,7 @@ def create_dataframe_mutation_effect(
     """
 
     if type_motif_scanning != "PCC" and type_motif_scanning != "conv_scanning":
-        raise ValueError(
-            f'Type of motif scanning should be either "PCC" or "conv_scanning", but you selected {type_motif_scanning}'
-        )
+        sys.exit(f'Error: Type of motif scanning should be either "PCC" or "conv_scanning", but you selected {type_motif_scanning}')
     # Create folder if it doesn't exist
 
     folder_output = os.path.join(output_directory, f"{name}")
@@ -1997,6 +1996,7 @@ def plot_mutagenesis(
     hits=None,
     model=None,
     attribution_range=None,
+    min_relative_attribution=0.15,
 ):
     """
     Args:
@@ -2151,6 +2151,7 @@ def plot_mutagenesis(
         cutoff=cutoff,
         best_motif_in_range=15,
         known_ICM=ICT_hocomoco_dict,
+        min_relative_attribution=min_relative_attribution,
         fig=fig,
         hits=hits,
     )

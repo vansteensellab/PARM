@@ -6,6 +6,7 @@ from .PARM_predict import PARM_predict
 from .PARM_mutagenesis import PARM_mutagenesis, PARM_plot_mutagenesis
 from .PARM_train import PARM_train
 from .version import __version__
+from .PARM_misc import check_sequence_length
 import warnings
 import os
 import sys
@@ -112,6 +113,8 @@ def train(args):
 
 
 def predict(args):
+    # Check input fasta
+    check_sequence_length(args.input, args.L_max)
     # Implement the logic for the predict command here
     print(description)
     print("=" * 80)
@@ -131,7 +134,8 @@ def predict(args):
 
 
 def mutagenesis(args):
-    # Check if required arguments are present
+    # Check input fasta
+    check_sequence_length(args.input, args.L_max)
     print(description)
     print("=" * 80)
     print("{: ^80}".format("Mutagenesis"))
@@ -384,6 +388,17 @@ def predict_subparser(subparsers):
         help="Path to the output file where the predictions will be saved. Output is a "
         "tab-separated file with the sequence, header, and the predicted score.",
     )
+    
+    advanced_args = group.add_argument_group("Advanced arguments (if you trained your own model)")
+
+    advanced_args.add_argument(
+        "--L_max",
+        type=int,
+        default=600,
+        help="The maximum length of the sequences allowed by the model. All pre-trained models "
+        "have `--L_max 600`. However, if you trained your own PARM model with a different L_max value, "
+        "you should specify it here. (Default: 600)"
+    )
 
     other_args = group.add_argument_group("Other")
     other_args.add_argument(
@@ -445,6 +460,16 @@ def mutagenesis_subparser(subparsers):
         help="Path or url to the motif databae (JASPAR format). Default is HOCOMOCOv11: https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
     )
 
+    advanced_args = group.add_argument_group("Advanced arguments (if you trained your own model)")
+
+    advanced_args.add_argument(
+        "--L_max",
+        type=int,
+        default=600,
+        help="The maximum length of the sequences allowed by the model. All pre-trained models "
+        "have `--L_max 600`. However, if you trained your own PARM model with a different L_max value, "
+        "you should specify it here. (Default: 600)"
+    )
     #
     other_args = group.add_argument_group("Other")
     other_args.add_argument(

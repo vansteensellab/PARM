@@ -1,4 +1,6 @@
 from .version import __version__
+from Bio import SeqIO
+import sys
 
 def log(message: str):
     """
@@ -21,3 +23,14 @@ def log(message: str):
     """
     v = 'PARM v' + __version__
     print(f"[{v}] {message}", flush=True)
+    
+def check_sequence_length(fasta_file, L_max = 600):
+    """
+    Check if any of the sequences in a fasta file are longer than a specified length.
+    If any, an error message is printed.
+    """
+    
+    for record in SeqIO.parse(fasta_file, "fasta"):
+        if len(record.seq) > L_max:
+            sys.exit(f"Error: Sequence {record.id} is longer than {L_max} nucleotides.")
+            

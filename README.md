@@ -22,7 +22,7 @@ This is useful for predicting which TFs are regulating (activating or repressing
 **PARM** can be easily installed with `conda`:
 
 ```sh
-conda install -c anaconda -c conda-forge -c bioconda parm
+conda install -c anaconda -c conda-forge -c bioconda -c pytorch parm
 ```
 
 # Usage examples

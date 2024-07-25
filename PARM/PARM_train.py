@@ -412,7 +412,7 @@ def train_loop(
                 torch.norm(weight, p=2) for _, weight in model.named_parameters()
             )
             l1_norm = sum(
-                torch.norm(weight, p=2) for _, weight in model.named_parameters()
+                torch.norm(weight, p=1) for _, weight in model.named_parameters()
             )
 
             loss = criterion(pred, y) + l2_norm * betas[1] + l1_norm * betas[0]

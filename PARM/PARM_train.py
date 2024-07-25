@@ -327,14 +327,13 @@ def objective(
     # TRAINING is complete.
 
     ##We've finished all epochs
-    log(f"Training process has finished. Saving trained model.")
-
+    log(f"Finished training!")
+    log(f"Model saved in: {os.path.join(output_directory, "model.parm")}")
     torch.save(model.state_dict(), os.path.join(output_directory, f"model.parm"))
 
+    log(f"Saving dataframe and plots with results in {output_directory}")
     column_names = ["epoch", "training_loss", "validation_loss"]
-
     results = pd.DataFrame(results, columns=column_names)
-
     results.to_csv(
         os.path.join(output_directory, f"results_model_PARM.txt"), index=False, sep="\t"
     )

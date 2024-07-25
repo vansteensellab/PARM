@@ -16,6 +16,7 @@ from .PARM_utils_data_loader import (
     h5_dataset,
     gradual_warmup_scheduler,
 )
+from tqdm import tqdm
 from .PARM_misc import log
 
 
@@ -52,14 +53,13 @@ def PARM_train(args):
         )  # Create folder where all the output is going to be saved
 
     # All loging functions will be saved in a file
-    f = open(os.path.join(output_directory, "log.txt"), "w")
+    #f = open(os.path.join(output_directory, "log.txt"), "w")
     
-    log(f"\n Cuda working? {torch.cuda.is_available()}")
+    log(f"Cuda working? {torch.cuda.is_available()}")
 
-    log(f" Output directory: {output_directory}")
-    sys.stdout = f
+    log(f"Output directory: {output_directory}")
 
-    log(f" Input Directory {input_directory}")
+    log(f"Input Directory {input_directory}")
 
     # Check if validation data is in training data
     error = any(
@@ -68,7 +68,6 @@ def PARM_train(args):
     if error:
         sys.exit("Error: Your validation data is in your trainning data.")
 
-    log(f" Validation Directory {validation_path}")
 
     #############
     # 4. Run models
@@ -92,7 +91,6 @@ def PARM_train(args):
     }
 
     objective(**param_model)
-    f.close()
 
 
 def objective(
@@ -130,28 +128,11 @@ def objective(
     Returns:
 
     """
+    log("Preparing for training")
     warmup = True
     type_optimizer = "Adam"
     padding_alternate = True
     gradient_clipping = 0.2
-
-    log(f" ---- Selection of fragments ---- \n" f"      L max: {L_max} \n")
-
-    log(
-        f" ---- PARAMETERS LEARNING ---- \n"
-        f"      Batch size:  {batch_size} \n"
-        f"      Gradient clipping:  {gradient_clipping} \n"
-        f"      Nº epoch: {n_epochs} \n"
-        f"      Learning rate: {lr} \n"
-        f"      Weight decay: {weight_decay} \n"
-        f"      Type optimizer: {type_optimizer} \n"
-        f"      Warmup: {warmup} \n"
-        f"      Scheduler: {scheduler} \n"
-        f"      Alternate type of paddings: {padding_alternate} \n"
-        f"      Regularization: Beta1 {betas[0]} beta2 {betas[1]} \n"
-    )
-
-    log(f" ---- INPUT DATA ---- \n" f"      Adaptor: {adaptor} \n")
 
     ##################################
     ##Define losses
@@ -214,11 +195,8 @@ def objective(
 
     index_dataset_train = np.transpose(index_dataset_train)
     training_set = h5_dataset(path=input_directory, celltype=cell_type)
-
-    # index_dataset_train: shape (n_samples,info). dataset_index[:,0] --> index. dataset_index[:,1] --> n_file_dataset
-
     log(
-        f"     Number of fragments after selection {index_dataset_train.shape} {index_dataset_train[:,0]}"
+        f"Number of fragments shorter than {L_max}: {index_dataset_train.shape[0]}"
     )
 
     sampler = shuffle_batch_sampler(
@@ -227,7 +205,7 @@ def objective(
     training_generator = torch.utils.data.DataLoader(
         training_set, sampler=sampler, **params
     )
-
+    
     #### VALIDATION
 
     ##feat_selection_percentage
@@ -274,15 +252,17 @@ def objective(
 
     # empty list to store training and validation losses
     train_losses, val_losses, results = [], [], []
-
     for epoch in range(n_epochs):
         log(
-            f"------------------------------------------- \n --- Epoch {epoch}"
+            f"{'-'*20} Epoch {epoch}/{n_epochs} {'-'*20}"
         )
 
         ########### TRAINING LOOP
-
+        # Get total_iterations for the progress bar
+        total_iterations_train = len(training_generator)
+        
         ##Data  generator. Redo in every step so there;s random order
+        log("Start training")
         _, _, training_loss = train_loop(
             train_dataloader = training_generator,
             model = model,
@@ -291,6 +271,8 @@ def objective(
             scheduler = scheduler,
             betas = betas,
             gradient_clipping=gradient_clipping,
+            total_iterations=total_iterations_train,
+            this_epoch=epoch 
         )
 
         sampler = shuffle_batch_sampler(
@@ -306,11 +288,16 @@ def objective(
             raise optuna.exceptions.TrialPruned()
 
         ########### VALIDATION LOOP
-
+        log("Start validation")
         with torch.no_grad():
-
+            # Get total_iterations for the progress bar
+            total_iterations_val = len(validation_generator)
             y_val_predicted, y_val_true, val_loss = validation_loop(
-                validation_generator, model, criterion, output_directory, betas
+                valid_dataloader=validation_generator, 
+                model=model, 
+                criterion=criterion, 
+                betas=betas,
+                total_iterations=total_iterations_val
             )
             results.append([epoch, training_loss, val_loss])
 
@@ -326,9 +313,10 @@ def objective(
         COEFF = r2_score(true_sub, predicted_sub)
         PCC = round(pearsonr(true_sub, predicted_sub)[0], 3)
 
-        log(
-            f"\n      Validation: Coeff R2 {round(COEFF,3)},  MSE: {round(MSE,2)}, PCC {round(PCC,3)}"
-        )
+        log(f"Summary validation")
+        log(f"\t R2 coefficient: {round(COEFF,4)}")
+        log(f"\t Mean sq. error: {round(MSE,4)}")
+        log(f"\t Pearson's correlation: {round(PCC,4)}")
 
         if (epoch) % 5 == 0 or epoch == (n_epochs - 1):
             torch.save(
@@ -339,14 +327,13 @@ def objective(
     # TRAINING is complete.
 
     ##We've finished all epochs
-    log(f"Training process has finished. Saving trained model.")
-
+    log(f"Finished training!")
+    log(f"Model saved in: {os.path.join(output_directory, "model.parm")}")
     torch.save(model.state_dict(), os.path.join(output_directory, f"model.parm"))
 
+    log(f"Saving dataframe and plots with results in {output_directory}")
     column_names = ["epoch", "training_loss", "validation_loss"]
-
     results = pd.DataFrame(results, columns=column_names)
-
     results.to_csv(
         os.path.join(output_directory, f"results_model_PARM.txt"), index=False, sep="\t"
     )
@@ -370,6 +357,8 @@ def train_loop(
     scheduler,
     betas,
     gradient_clipping=False,
+    total_iterations=0,
+    this_epoch=0,
 ):
     """
     Training loop.
@@ -382,6 +371,8 @@ def train_loop(
         scheduler:
         betas: (tuple) (int, int) Beta 1 and Beta 2 respectively for regularization.
         gradient_clipping: (float) If not False, then perform gradient clipping with that max norm.
+        total_iterations: (int) Total number of iterations. (for the progress bar)
+        this_epoch: (int) Current epoch.
 
     Returns:
         y_train_predicted: (np.array) Fragment predictions
@@ -390,11 +381,13 @@ def train_loop(
     """
 
     model.train()
-
+    loss_value = 9.9999
     training_loss = 0.0
     y_train_predicted, y_train_true = np.empty((0, 1)), np.empty((0, 1))
+    pbar = tqdm(enumerate(train_dataloader), ncols=150, total=total_iterations, file=sys.stdout)
+    for batch_ndx, (X, y) in pbar:
+        pbar.set_postfix({'Epoch': this_epoch, 'Loss': f"{loss_value:.4f}", 'LR': f"{optimizer.param_groups[0]['lr']:.4f}"})
 
-    for batch_ndx, (X, y) in enumerate(train_dataloader):
 
         optimizer.zero_grad()
 
@@ -405,9 +398,7 @@ def train_loop(
             X = X.cuda()
             y = y.cuda()
 
-        log(f"within y.shape {y.shape}")
         pred = model(X)
-        log(f"within pred.shape {pred.shape}")
 
         if batch_ndx % 13 == 0:
             y_train_predicted = np.append(
@@ -421,7 +412,7 @@ def train_loop(
                 torch.norm(weight, p=2) for _, weight in model.named_parameters()
             )
             l1_norm = sum(
-                torch.norm(weight, p=2) for _, weight in model.named_parameters()
+                torch.norm(weight, p=1) for _, weight in model.named_parameters()
             )
 
             loss = criterion(pred, y) + l2_norm * betas[1] + l1_norm * betas[0]
@@ -442,28 +433,19 @@ def train_loop(
         if scheduler:
             scheduler.step()
 
-        # log results so far
-        if batch_ndx % int(len(train_dataloader) / 20) == 0:
-            loss, current = training_loss / (batch_ndx + 1), batch_ndx * len(X)
-            perc = current / (len(train_dataloader) * X.shape[0]) * 100
-            log(
-                f" loss: {loss:>7f}  [{current}/{(len(train_dataloader)*X.shape[0])}]  {round(perc,3)}%"
-            )
-
-            for param_group in optimizer.param_groups:
-                log(f"       Learning rate: {param_group['lr'] }")
-                continue
+        loss_value = training_loss / (batch_ndx + 1)
 
     training_loss /= batch_ndx
 
     mse = (((y_train_predicted - y_train_true) ** 2) ** (1 / 2)).mean()
 
-    log(f"Training Error: Avg loss: {training_loss:>8f}")
-    log(f"                MSE {mse:>3f}")
+    log(f"Training summary")
+    log(f"\t Avg. loss: {training_loss:>8f}")
+    log(f"\t Mean sq. error: {mse:>3f}")
     return (y_train_predicted, y_train_true, training_loss)
 
 
-def validation_loop(valid_dataloader, model, criterion, betas):
+def validation_loop(valid_dataloader, model, criterion, betas, total_iterations):
     """
     Validation loop.
     Args:
@@ -484,7 +466,7 @@ def validation_loop(valid_dataloader, model, criterion, betas):
     val_loss = 0.0
 
     with torch.no_grad():
-        for batch_ndx, (X, y) in enumerate(valid_dataloader):
+        for batch_ndx, (X, y) in tqdm(enumerate(valid_dataloader), total=total_iterations, ncols=100, file=sys.stdout):
 
             X = X.permute(0, 2, 1)
             y = torch.flatten(y, 1, 2)
@@ -521,83 +503,6 @@ def validation_loop(valid_dataloader, model, criterion, betas):
             val_loss += loss.item()
 
     val_loss /= batch_ndx
-    mse = (((y_val_predicted - y_val_real) ** 2) ** (1 / 2)).mean()
-
-    log(f"Validation Error: Avg loss: {val_loss:>8f}")
-    log(f"                  MSE {mse:>3f}")
 
     return (y_val_predicted, y_val_real, val_loss)
-
-
-
-def validation_loop(valid_dataloader, model, output_directory, betas, cell_line:str):
-    """
-    Validation loop.
-    Args:
-        valid_dataloader:
-        model:
-        criterion:
-        output_directory: (str) Output directory.
-        cell_line: (str) Cell lines used to train and predict, if more than one separate by "_" e.g. K562_HEPG2
-    
-    Returns:
-        y_val_predicted: (np.array) Fragment predictions
-        y_valid_true: (np.array) Measured SuRE score, matching fragments with the one in y_train_predicted
-        valid_loss: (float) Loss performance of epoch.
-    """
-
-    
-    n_cels = len(cell_line.split('__'))
-    y_val_predicted, y_val_real = np.empty((0,n_cels)), np.empty((0,n_cels))
-
-    model.eval()
-
-    val_loss = 0.0
-
-
-    with torch.no_grad():
-        for batch_ndx, (X, y) in enumerate(valid_dataloader):
-
-            X = X.permute(0,2,1)
-            y = torch.flatten(y, 1, 2)
-
-
-            if torch.cuda.is_available():
-                X = X.cuda()
-                y = y.cuda()
-
-            pred = model(X)
-
-            if batch_ndx % 5 == 0:
-                y_val_predicted = np.append(y_val_predicted, pred.cpu().detach().numpy(), axis=0)
-                y_val_real = np.append(y_val_real, y.cpu().detach().numpy(), axis=0)
-
-            
-
-
-            if betas[0] != 0 or betas[1] != 0:
-
-                l2_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
-
-                l1_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
-
-                loss = criterion(pred, y)  + l2_norm*betas[1] + l1_norm*betas[0]
-
-            else:
-                loss = criterion(pred, y)
-
-
-            # Backpropagation
-
-            val_loss += loss.item()
-
-
-    val_loss /= (batch_ndx)
-    mse = (((y_val_predicted-y_val_real)**2)**(1/2)).mean()
-
-
-    log(f"Validation Error: Avg loss: {val_loss:>8f}")
-    log(f"                  MSE {mse:>3f}")
-    
-    return(y_val_predicted, y_val_real, val_loss)
 

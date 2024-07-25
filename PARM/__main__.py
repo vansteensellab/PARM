@@ -6,7 +6,7 @@ from .PARM_predict import PARM_predict
 from .PARM_mutagenesis import PARM_mutagenesis, PARM_plot_mutagenesis
 from .PARM_train import PARM_train
 from .version import __version__
-from .PARM_misc import check_sequence_length
+from .PARM_misc import check_sequence_length, check_cuda
 import warnings
 import os
 import sys
@@ -347,6 +347,12 @@ def train_subparser(subparsers):
         action="version",
         version="PARM v" + __version__,
         help="Show program's version number and exit",
+    )
+    other_args.add_argument(
+        "--check_cuda",
+        action=check_cuda,
+        nargs=0,
+        help="Check if CUDA is available and exit",
     )
 
     

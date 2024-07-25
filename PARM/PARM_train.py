@@ -16,6 +16,7 @@ from .PARM_utils_data_loader import (
     h5_dataset,
     gradual_warmup_scheduler,
 )
+from tqdm import tqdm
 from .PARM_misc import log
 
 
@@ -52,14 +53,13 @@ def PARM_train(args):
         )  # Create folder where all the output is going to be saved
 
     # All loging functions will be saved in a file
-    f = open(os.path.join(output_directory, "log.txt"), "w")
+    #f = open(os.path.join(output_directory, "log.txt"), "w")
     
-    log(f"\n Cuda working? {torch.cuda.is_available()}")
+    log(f"Cuda working? {torch.cuda.is_available()}")
 
-    log(f" Output directory: {output_directory}")
-    sys.stdout = f
+    log(f"Output directory: {output_directory}")
 
-    log(f" Input Directory {input_directory}")
+    log(f"Input Directory {input_directory}")
 
     # Check if validation data is in training data
     error = any(
@@ -92,7 +92,6 @@ def PARM_train(args):
     }
 
     objective(**param_model)
-    f.close()
 
 
 def objective(
@@ -135,23 +134,23 @@ def objective(
     padding_alternate = True
     gradient_clipping = 0.2
 
-    log(f" ---- Selection of fragments ---- \n" f"      L max: {L_max} \n")
+    log(f"{'-'*20} Selection of fragments {'-'*20}\n")
+    log(f"L max: {L_max} \n")
 
-    log(
-        f" ---- PARAMETERS LEARNING ---- \n"
-        f"      Batch size:  {batch_size} \n"
-        f"      Gradient clipping:  {gradient_clipping} \n"
-        f"      Nº epoch: {n_epochs} \n"
-        f"      Learning rate: {lr} \n"
-        f"      Weight decay: {weight_decay} \n"
-        f"      Type optimizer: {type_optimizer} \n"
-        f"      Warmup: {warmup} \n"
-        f"      Scheduler: {scheduler} \n"
-        f"      Alternate type of paddings: {padding_alternate} \n"
-        f"      Regularization: Beta1 {betas[0]} beta2 {betas[1]} \n"
-    )
+    log(f"{'-'*20} PARAMETERS LEARNING {'-'*20")
+    log(f"Batch size:  {batch_size}")
+    log(f"Gradient clipping:  {gradient_clipping}")
+    log(f"Nº epoch: {n_epochs}")
+    log(f"Learning rate: {lr}")
+    log(f"Weight decay: {weight_decay}")
+    log(f"Type optimizer: {type_optimizer}")
+    log(f"Warmup: {warmup}")
+    log(f"Scheduler: {scheduler}")
+    log(f"Alternate type of paddings: {padding_alternate}")
+    log(f"Regularization: Beta1 {betas[0]} beta2 {betas[1]}")
 
-    log(f" ---- INPUT DATA ---- \n" f"      Adaptor: {adaptor} \n")
+    log(f"{'-'*20} INPUT DATA {'-'*20}")
+    log(f"Adaptor: {adaptor}")
 
     ##################################
     ##Define losses
@@ -218,7 +217,7 @@ def objective(
     # index_dataset_train: shape (n_samples,info). dataset_index[:,0] --> index. dataset_index[:,1] --> n_file_dataset
 
     log(
-        f"     Number of fragments after selection {index_dataset_train.shape} {index_dataset_train[:,0]}"
+        f"Number of fragments after selection {index_dataset_train.shape} {index_dataset_train[:,0]}"
     )
 
     sampler = shuffle_batch_sampler(
@@ -277,7 +276,7 @@ def objective(
 
     for epoch in range(n_epochs):
         log(
-            f"------------------------------------------- \n --- Epoch {epoch}"
+            f"{'-'*20} Epoch {epoch} {'-'*20}"
         )
 
         ########### TRAINING LOOP
@@ -310,7 +309,10 @@ def objective(
         with torch.no_grad():
 
             y_val_predicted, y_val_true, val_loss = validation_loop(
-                validation_generator, model, criterion, output_directory, betas
+                valid_dataloader=validation_generator, 
+                model=model, 
+                criterion=criterion, 
+                betas=betas
             )
             results.append([epoch, training_loss, val_loss])
 
@@ -326,9 +328,8 @@ def objective(
         COEFF = r2_score(true_sub, predicted_sub)
         PCC = round(pearsonr(true_sub, predicted_sub)[0], 3)
 
-        log(
-            f"\n      Validation: Coeff R2 {round(COEFF,3)},  MSE: {round(MSE,2)}, PCC {round(PCC,3)}"
-        )
+        log(f"== Validation:")
+        log(f"=== Coeff R2 {round(COEFF,3)},  MSE: {round(MSE,2)}, PCC: {round(PCC,3)}")
 
         if (epoch) % 5 == 0 or epoch == (n_epochs - 1):
             torch.save(
@@ -394,7 +395,7 @@ def train_loop(
     training_loss = 0.0
     y_train_predicted, y_train_true = np.empty((0, 1)), np.empty((0, 1))
 
-    for batch_ndx, (X, y) in enumerate(train_dataloader):
+    for batch_ndx, (X, y) in tqdm(enumerate(train_dataloader), ncols=80):
 
         optimizer.zero_grad()
 
@@ -405,9 +406,9 @@ def train_loop(
             X = X.cuda()
             y = y.cuda()
 
-        log(f"within y.shape {y.shape}")
+        #log(f"within y.shape {y.shape}")
         pred = model(X)
-        log(f"within pred.shape {pred.shape}")
+        #log(f"within pred.shape {pred.shape}")
 
         if batch_ndx % 13 == 0:
             y_train_predicted = np.append(
@@ -458,8 +459,9 @@ def train_loop(
 
     mse = (((y_train_predicted - y_train_true) ** 2) ** (1 / 2)).mean()
 
-    log(f"Training Error: Avg loss: {training_loss:>8f}")
-    log(f"                MSE {mse:>3f}")
+    log(f"= Training Error:")
+    log(f"=== Avg loss: {training_loss:>8f}")
+    log(f"=== MSE {mse:>3f}")
     return (y_train_predicted, y_train_true, training_loss)
 
 
@@ -523,81 +525,9 @@ def validation_loop(valid_dataloader, model, criterion, betas):
     val_loss /= batch_ndx
     mse = (((y_val_predicted - y_val_real) ** 2) ** (1 / 2)).mean()
 
-    log(f"Validation Error: Avg loss: {val_loss:>8f}")
-    log(f"                  MSE {mse:>3f}")
+    log(f"== Validation Error:")
+    log(f"=== Avg loss: {val_loss:>8f}")
+    log(f"=== MSE {mse:>3f}")
 
     return (y_val_predicted, y_val_real, val_loss)
-
-
-
-def validation_loop(valid_dataloader, model, output_directory, betas, cell_line:str):
-    """
-    Validation loop.
-    Args:
-        valid_dataloader:
-        model:
-        criterion:
-        output_directory: (str) Output directory.
-        cell_line: (str) Cell lines used to train and predict, if more than one separate by "_" e.g. K562_HEPG2
-    
-    Returns:
-        y_val_predicted: (np.array) Fragment predictions
-        y_valid_true: (np.array) Measured SuRE score, matching fragments with the one in y_train_predicted
-        valid_loss: (float) Loss performance of epoch.
-    """
-
-    
-    n_cels = len(cell_line.split('__'))
-    y_val_predicted, y_val_real = np.empty((0,n_cels)), np.empty((0,n_cels))
-
-    model.eval()
-
-    val_loss = 0.0
-
-
-    with torch.no_grad():
-        for batch_ndx, (X, y) in enumerate(valid_dataloader):
-
-            X = X.permute(0,2,1)
-            y = torch.flatten(y, 1, 2)
-
-
-            if torch.cuda.is_available():
-                X = X.cuda()
-                y = y.cuda()
-
-            pred = model(X)
-
-            if batch_ndx % 5 == 0:
-                y_val_predicted = np.append(y_val_predicted, pred.cpu().detach().numpy(), axis=0)
-                y_val_real = np.append(y_val_real, y.cpu().detach().numpy(), axis=0)
-
-            
-
-
-            if betas[0] != 0 or betas[1] != 0:
-
-                l2_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
-
-                l1_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
-
-                loss = criterion(pred, y)  + l2_norm*betas[1] + l1_norm*betas[0]
-
-            else:
-                loss = criterion(pred, y)
-
-
-            # Backpropagation
-
-            val_loss += loss.item()
-
-
-    val_loss /= (batch_ndx)
-    mse = (((y_val_predicted-y_val_real)**2)**(1/2)).mean()
-
-
-    log(f"Validation Error: Avg loss: {val_loss:>8f}")
-    log(f"                  MSE {mse:>3f}")
-    
-    return(y_val_predicted, y_val_real, val_loss)
 

@@ -96,6 +96,7 @@ def train(args):
     print_arguments("Validation", args.validation)
     print_arguments("Output", args.output)
     print_arguments("Cell type", args.cell_type)
+    print_arguments("Measurement column name", args.measurement_column)
     print_arguments("Number of workers", args.n_workers)
     print_arguments("Number of epochs", args.n_epochs)
     print_arguments("Batch size", args.batch_size)
@@ -243,6 +244,13 @@ def train_subparser(subparsers):
         type=str,
         help="The name of the cell type that you want to create a model to. "
         "This should be the same name as in the input h5 files",
+    )
+    
+    required_args.add_argument(
+        "--measurement_column", required=True,
+        type=str,
+        help="Which column in the input file contains the measurement data. "
+        "(e.g., Log2TPM_K562)",
     )
 
     model_args = group.add_argument_group("Advanced arguments (for model training)")

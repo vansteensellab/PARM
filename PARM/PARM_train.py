@@ -327,8 +327,8 @@ def objective(
 
     ##We've finished all epochs
     log(f"Finished training!")
-    log(f"Model saved in: {os.path.join(output_directory, 'model.parm')}")
-    torch.save(model.state_dict(), os.path.join(output_directory, f"model.parm"))
+    log(f"Model saved in: {os.path.join(output_directory, f'{cell_type}.parm')}")
+    torch.save(model.state_dict(), os.path.join(output_directory, f"{cell_type}.parm"))
 
     log(f"Saving dataframe and plots with results in {output_directory}")
     column_names = ["epoch", "training_loss", "validation_loss"]

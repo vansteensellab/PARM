@@ -124,14 +124,14 @@ def predict(args):
     print_arguments("Model", models)
     print_arguments("Input", args.input)
     print_arguments("Output", args.output)
-    print_arguments("Number of batches", args.n_batches)
+    print_arguments("Number of batches", args.n_seqs_per_batch)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_predict(
         input=args.input,
         model_weights=args.model,
         output=args.output,
-        n_batches=args.n_batches,
+        n_seqs_per_batch=args.n_seqs_per_batch,
     )
 
 
@@ -398,7 +398,7 @@ def predict_subparser(subparsers):
     )
 
     required_args.add_argument(
-        "--n_batches",
+        "--n_seqs_per_batch",
         type=int,
         default=1,
         help=" Number of sequences to predict simultaneously, increase only if your memory allows it. (Default: 1)"

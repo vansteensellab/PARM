@@ -124,12 +124,14 @@ def predict(args):
     print_arguments("Model", models)
     print_arguments("Input", args.input)
     print_arguments("Output", args.output)
+    print_arguments("Number of batches", args.n_batches)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_predict(
         input=args.input,
         model_weights=args.model,
         output=args.output,
+        n_batches=args.n_batches,
     )
 
 
@@ -394,6 +396,14 @@ def predict_subparser(subparsers):
         help="Path to the output file where the predictions will be saved. Output is a "
         "tab-separated file with the sequence, header, and the predicted score.",
     )
+
+    required_args.add_argument(
+        "--n_batches",
+        type=int,
+        default=1,
+        help=" Number of sequences to predict simultaneously, increase only if your memory allows it. (Default: 1)"
+    )
+
     
     advanced_args = group.add_argument_group("Advanced arguments (if you trained your own model)")
 
@@ -405,6 +415,8 @@ def predict_subparser(subparsers):
         "have `--L_max 600`. However, if you trained your own PARM model with a different L_max value, "
         "you should specify it here. (Default: 600)"
     )
+
+    
 
     other_args = group.add_argument_group("Other")
     other_args.add_argument(

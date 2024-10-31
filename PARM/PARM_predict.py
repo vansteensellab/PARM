@@ -12,7 +12,7 @@ from tqdm import tqdm
 def PARM_predict(input : str,
                  output : str, 
                  model_weights : list,
-                 n_batches : int = 1):
+                 n_seqs_per_batch : int = 1):
     """
     Reads the input (fasta file) and predicts promoter activity scores using the PARM models.
     Writes the output as tab-separated values, where each column is a model and each row is a sequence.
@@ -25,7 +25,7 @@ def PARM_predict(input : str,
         Path to the output file.
     model_weights : list
         List of paths to the PARM model weights. This should be a list even if there is only one model.
-    n_batches : int
+    n_seqs_per_batch : int
         Number of batches to use for prediction. If your GPUs runs out of memory, might be because of that. Default is 1.
         
     Returns
@@ -49,7 +49,7 @@ def PARM_predict(input : str,
     total_interactions = total_sequences * len(
         complete_models
     )
-    pbar = tqdm(total=int(total_interactions/n_batches), ncols=80)
+    pbar = tqdm(total=int(total_interactions/n_seqs_per_batch), ncols=80)
     output_df = pd.DataFrame()
 
     i = 0
@@ -59,7 +59,7 @@ def PARM_predict(input : str,
         if i ==0: tmp = pd.DataFrame({"sequence": [sequence], "header": [record.id]})
         else: tmp = pd.concat([tmp, pd.DataFrame({"sequence": [sequence], "header": [record.id]})])
         # Get predictions for all models
-        if (i+1) == n_batches or (i_record == (total_sequences-1)):
+        if (i+1) == n_seqs_per_batch or (i_record == (total_sequences-1)):
             for model_name, model in complete_models.items():
                 tmp[model_name] = get_prediction(tmp.sequence.to_list(), model)
                 pbar.update(1)

@@ -12,7 +12,8 @@ from tqdm import tqdm
 def PARM_predict(input : str,
                  output : str, 
                  model_weights : list,
-                 n_seqs_per_batch : int = 1):
+                 n_seqs_per_batch : int = 1,
+                 store_sequence : bool = True):
     """
     Reads the input (fasta file) and predicts promoter activity scores using the PARM models.
     Writes the output as tab-separated values, where each column is a model and each row is a sequence.
@@ -27,6 +28,9 @@ def PARM_predict(input : str,
         List of paths to the PARM model weights. This should be a list even if there is only one model.
     n_seqs_per_batch : int
         Number of batches to use for prediction. If your GPUs runs out of memory, might be because of that. Default is 1.
+    
+    store_sequence : bool
+        If True, the output file will contain the sequences and headers. Otherwise, only the headers and score will be saved. Default is True.
         
     Returns
     -------
@@ -50,7 +54,6 @@ def PARM_predict(input : str,
         complete_models
     )
     pbar = tqdm(total=int(total_interactions/n_seqs_per_batch), ncols=80)
-    output_df = pd.DataFrame()
 
     i = 0
     for i_record, record in enumerate(SeqIO.parse(input, "fasta")):
@@ -58,20 +61,29 @@ def PARM_predict(input : str,
         sequence = str(record.seq).upper()
         if i ==0: tmp = pd.DataFrame({"sequence": [sequence], "header": [record.id]})
         else: tmp = pd.concat([tmp, pd.DataFrame({"sequence": [sequence], "header": [record.id]})])
+        
         # Get predictions for all models
         if (i+1) == n_seqs_per_batch or (i_record == (total_sequences-1)):
             for model_name, model in complete_models.items():
                 tmp[model_name] = get_prediction(tmp.sequence.to_list(), model)
                 pbar.update(1)
+
             # Store in output df
-            output_df = pd.concat([output_df, tmp], axis=0, ignore_index=True)
+            #IF it's the first batch, save the df with headers, otherwise, save only the scores
+            if i_record < n_seqs_per_batch: 
+                if store_sequence: tmp.to_csv(output, sep="\t", index=False)
+                else: (tmp.drop(columns=["sequence"])).to_csv(output, sep="\t", index=False)
+            else:
+                if store_sequence: tmp.to_csv(output, sep="\t", index=False, mode='a', header=False)
+                else: (tmp.drop(columns=["sequence"])).to_csv(output, sep="\t", index=False, mode='a', header=False)
+
             i = 0
+            
             
         else: i += 1
     # Write output
     pbar.close()
-    log("Writing output file")
-    output_df.to_csv(output, sep="\t", index=False)
+    log("Finish output file")
 
 
 def get_prediction(sequence, complete_model):

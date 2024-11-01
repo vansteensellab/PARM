@@ -125,6 +125,7 @@ def predict(args):
     print_arguments("Input", args.input)
     print_arguments("Output", args.output)
     print_arguments("Number of batches", args.n_seqs_per_batch)
+    print_arguments(f"Will sequences be save in the output file?", args.store_sequence)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_predict(
@@ -132,6 +133,7 @@ def predict(args):
         model_weights=args.model,
         output=args.output,
         n_seqs_per_batch=args.n_seqs_per_batch,
+        store_sequence= args.store_sequence,
     )
 
 
@@ -404,7 +406,14 @@ def predict_subparser(subparsers):
         help=" Number of sequences to predict simultaneously, increase only if your memory allows it. (Default: 1)"
     )
 
-    
+    required_args.add_argument(
+        "--store_sequence",
+        action = argparse.BooleanOptionalAction,
+        default=True,
+        help="If True (--store_sequence), the output file will contain the sequences and headers.\n"
+                " Otherwise (--no-store_sequence), only the headers and score will be saved. (Default: True)"
+    )
+
     advanced_args = group.add_argument_group("Advanced arguments (if you trained your own model)")
 
     advanced_args.add_argument(

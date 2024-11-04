@@ -7,3 +7,4 @@ conda.list
 data/
 example_data/foo
 src/
+.Rhistory

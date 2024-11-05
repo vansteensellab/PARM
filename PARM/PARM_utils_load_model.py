@@ -36,7 +36,7 @@ def load_PARM(
     --------
     >>> model = load_PARM("model.parm")
     """
-    model = ResNet_Attentionpool(L_max=L_max, n_block=n_block, filter_size=filter_size)
+    model = ResNet_Attentionpool(L_max=L_max, n_block=n_block, filter_size=filter_size, weight_file=weight_file)
     if train:
         if torch.cuda.is_available():
             model = model.cuda()
@@ -107,7 +107,7 @@ class AttentionPool(nn.Module):
 
 class ResNet_Attentionpool(nn.Module):
 
-    def __init__(self, L_max, n_block, filter_size=125):
+    def __init__(self, L_max, n_block, filter_size=125, weight_file=None):
         super(ResNet_Attentionpool, self).__init__()
 
         self.L_max = L_max  # Max length of sequence
@@ -117,6 +117,8 @@ class ResNet_Attentionpool(nn.Module):
         stem_kernel_size = 7
 
         self.n_blocks = n_block
+
+        if '_TSS_EnhA_' in weight_file: filter_size = int(filter_size*2.4)
 
         ##################
         # create stem

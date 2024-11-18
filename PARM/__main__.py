@@ -171,7 +171,7 @@ def plot(args):
         out = args.output
     if args.attribution_range is not None:
         # convert to string just for printing
-        r = ", ".join([float(i) for i in args.attribution_range])
+        r = ", ".join([str(i) for i in args.attribution_range])
         attribution_range = args.attribution_range
     else:
         attribution_range = None

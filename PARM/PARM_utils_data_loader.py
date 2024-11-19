@@ -183,11 +183,11 @@ class h5_dataset(torch.utils.data.Dataset):
         same as desired Tensor type.
     """
 
-    def __init__(self, path, celltype,):
+    def __init__(self, path, celltype, measurement_column="Log2RPM_K562"):
         self.file_path = path
         self.dataset = None
         self.celltype = celltype
-        self.Zscore_logTPM = 'LnNorm'
+        self.measurement_column = measurement_column
         
         # Check if multiple cell types
         self.multiple_cells = self.celltype.split("__")
@@ -236,7 +236,7 @@ class h5_dataset(torch.utils.data.Dataset):
                         for rep in replicates_cells:
                             sure_it.append(
                                 np.float32(
-                                    file["Y"][f"{self.Zscore_logTPM}_{rep}"][
+                                    file["Y"][f"{self.measurement_column}"][
                                         index_unique_file
                                     ]
                                 )
@@ -250,7 +250,7 @@ class h5_dataset(torch.utils.data.Dataset):
                         ):  # check if inded this dataset has the cellline we are looking for
 
                             sure_it = np.float32(
-                                file["Y"][f"{self.Zscore_logTPM}_{cell}"][
+                                file["Y"][f"{self.measurement_column}"][
                                     index_unique_file
                                 ]
                             )
@@ -282,12 +282,12 @@ class h5_dataset(torch.utils.data.Dataset):
             for file in self.file_path:
                 with h5py.File(file, "r") as file:
                     dataset_len += len(
-                        file["Y"][f"{self.Zscore_logTPM}_{replicate_cell}"]
+                        file["Y"][f"{self.measurement_column}"]
                     )
 
         else:
             with h5py.File(os.path.join(self.file_path), "r") as file:
-                dataset_len = len(file["Y"][f"{self.Zscore_logTPM}_{replicate_cell}"])
+                dataset_len = len(file["Y"][f"{self.measurement_column}"])
 
         return dataset_len
 

@@ -1531,8 +1531,7 @@ def plot_logo(
     colors_base : int = False,
     highlight_position : int = False,
     fontsize : str = "medium",
-    max_lim : int = False,
-    min_lim : int = False,
+    attribution_range : list = None
 ):
     """
     Make plot given axis of DNA sequence importance. This plots the logo of the sequence.
@@ -1585,8 +1584,8 @@ def plot_logo(
     crp_logo.style_spines(spines=["left"], visible=True)
     crp_logo.ax.set_ylabel(ylabel, labelpad=-1, fontsize=fontsize)
 
-    if max_lim is not False and min_lim is not False:
-        crp_logo.ax.set_ylim(min_lim, max_lim)
+    if attribution_range is not None:
+        crp_logo.ax.set_ylim(attribution_range[0], attribution_range[1])
 
     crp_logo.ax.set_xticks([])
 
@@ -2163,6 +2162,7 @@ def plot_mutagenesis(
         ylabel="Variant effect\n(REF-mean(ALT))",
         colors_base=True,
         highlight_position=highlight_position,
+        attribution_range=attribution_range,
     )
 
     fig.colorbar(

@@ -8,3 +8,6 @@ data/
 example_data/foo
 src/
 .Rhistory
+PARM/__pycache__/*
+slurm_out/
+pre_trained_models/SuRE-prom-enh.parm

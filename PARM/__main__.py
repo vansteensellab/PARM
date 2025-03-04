@@ -126,6 +126,7 @@ def predict(args):
     print_arguments("Output", args.output)
     print_arguments("Number of batches", args.n_seqs_per_batch)
     print_arguments(f"Will sequences be save in the output file?", args.store_sequence)
+    print_arguments(f"Model filter size ", args.filter_size)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_predict(
@@ -134,6 +135,7 @@ def predict(args):
         output=args.output,
         n_seqs_per_batch=args.n_seqs_per_batch,
         store_sequence= args.store_sequence,
+        filter_size= args.filter_size
     )
 
 
@@ -425,7 +427,12 @@ def predict_subparser(subparsers):
         "you should specify it here. (Default: 600)"
     )
 
-    
+    advanced_args.add_argument(
+        "--filter_size",
+        type=int,
+        default=125,
+        help="The model size that torch expects (Default: 125) "
+    )
 
     other_args = group.add_argument_group("Other")
     other_args.add_argument(

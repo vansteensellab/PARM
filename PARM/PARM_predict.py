@@ -14,7 +14,8 @@ def PARM_predict(input : str,
                  model_weights : list,
                  n_seqs_per_batch : int = 1,
                  store_sequence : bool = True,
-                 filter_size : int = 125):
+                 filter_size : int = 125,
+                type_loss: str = 'poisson'):
     """
     Reads the input (fasta file) and predicts promoter activity scores using the PARM models.
     Writes the output as tab-separated values, where each column is a model and each row is a sequence.
@@ -46,7 +47,7 @@ def PARM_predict(input : str,
     complete_models = dict()
     for model_weight in model_weights:
         model_name = os.path.basename(model_weight).split(".")[0]
-        complete_models["prediction_" + model_name] = load_PARM(model_weight, filter_size = filter_size)
+        complete_models["prediction_" + model_name] = load_PARM(model_weight, filter_size = filter_size, train=False,type_loss=type_loss)
     # Iterate over sequences and predict scores
     log("Making predictions")
     total_sequences = sum(1 for _ in SeqIO.parse(input, "fasta"))

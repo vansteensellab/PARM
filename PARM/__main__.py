@@ -135,7 +135,8 @@ def predict(args):
         output=args.output,
         n_seqs_per_batch=args.n_seqs_per_batch,
         store_sequence= args.store_sequence,
-        filter_size= args.filter_size
+        filter_size= args.filter_size,
+        type_loss=args.type_loss
     )
 
 
@@ -433,6 +434,13 @@ def predict_subparser(subparsers):
         default=125,
         help="The model size that torch expects (Default: 125) "
     )
+
+    advanced_args.add_argument(
+        "--type_loss",
+        default = 'poisson',
+        choices=['MSE', 'poisson', 'heteroscedastic'],
+        type = str,
+        help=' Type of criterion. Possibilities: MSE or poison. (Default: poisson) \n')
 
     other_args = group.add_argument_group("Other")
     other_args.add_argument(

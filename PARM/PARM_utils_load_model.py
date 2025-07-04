@@ -124,7 +124,7 @@ class ResNet_Attentionpool(nn.Module):
 
         self.n_blocks = n_block
 
-        if '_TSS_EnhA_' in weight_file: filter_size = int(filter_size*2.4)
+        # if '_TSS_EnhA_' in weight_file: filter_size = int(filter_size*2.4)
 
         ##################
         # create stem
@@ -175,7 +175,7 @@ class ResNet_Attentionpool(nn.Module):
 
         out = self.linear1(out)
 
-        if self.heteroscedastic:
+        if self.type_loss == 'heteroscedastic':
             mu = self.linear1(out)
             log_var = self.log_var(out)  # Log variance
             #return(mu)

@@ -1,1 +1,0 @@
-models retrieved from: https://surfdrive.surf.nl/files/index.php/apps/files/?dir=/Shared/PERICODE%20(Groupfolder)/project/SuRE_predictor/raw/FREEZE_3.0_DATA/NK241205_pHY3_mESC-COND_K562_HAP1/04_MODELS/HAP1&fileid=15822407270

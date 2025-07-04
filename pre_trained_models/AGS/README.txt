@@ -1,1 +1,0 @@
-models retrieved from: https://surfdrive.surf.nl/files/index.php/apps/files/?dir=/Shared/PERICODE%20(Groupfolder)/project/SuRE_predictor/raw/FREEZE_3.0_DATA/VF241030_pHY3_CRC_GC/04_MODELS/AGS&fileid=15875373690

@@ -51,7 +51,7 @@ def PARM_predict(input : str,
         if file.endswith(".parm"):
             model_weights.append(os.path.join(model_directory, file))
     if len(model_weights) == 0:
-        raise ValueError(f"No model files (.parm) found in {model_directory}. Please check the path and ensure it contains the model files."))
+        raise ValueError(f"No model files (.parm) found in {model_directory}. Please check the path and ensure it contains the model files.")
     # Now, load the models
     model_name = ""
     for model_weight in model_weights:

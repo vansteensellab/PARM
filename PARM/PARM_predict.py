@@ -83,7 +83,7 @@ def PARM_predict(input : str,
                 predictions_all_folds.append(get_prediction(tmp.sequence.to_list(), model))
                 pbar.update(1)
             # Now, take the average of the predictions and add to the tmp[model_name] 
-            tmp[model_name] = np.mean(predictions_all_folds, axis=0)
+            tmp["prediction_" + model_name] = np.mean(predictions_all_folds, axis=0)
 
             # Store in output df
             #IF it's the first batch, save the df with headers, otherwise, save only the scores

@@ -120,13 +120,12 @@ def predict(args):
     print("=" * 80)
     print("{: ^80}".format("Predict"))
     print("-" * 80)
-    models = ",".join(args.model)
-    print_arguments("Model", models)
+    print_arguments("Model", args.model)
     print_arguments("Input", args.input)
     print_arguments("Output", args.output)
     print_arguments("Number of batches", args.n_seqs_per_batch)
-    print_arguments(f"Will sequences be save in the output file?", args.store_sequence)
-    print_arguments(f"Model filter size ", args.filter_size)
+    print_arguments("Show only sequence's header in the output file?", args.header_only)
+    print_arguments("Model filter size ", args.filter_size)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_predict(
@@ -134,7 +133,7 @@ def predict(args):
         model_directory=args.model,
         output=args.output,
         n_seqs_per_batch=args.n_seqs_per_batch,
-        store_sequence= args.store_sequence,
+        store_sequence=not args.header_only,
         filter_size= args.filter_size,
         type_loss=args.type_loss
     )
@@ -147,8 +146,8 @@ def mutagenesis(args):
     print("=" * 80)
     print("{: ^80}".format("Mutagenesis"))
     print("-" * 80)
-    models = ",".join(args.model)
-    print_arguments("Model", models)
+    # models = ",".join(args.model)
+    print_arguments("Model", args.model)
     print_arguments("Input", args.input)
     print_arguments("Output", args.output)
     # check if args.motif_database is the default
@@ -384,7 +383,6 @@ def predict_subparser(subparsers):
     required_args.add_argument(
         "--model",
         required=True,
-        nargs="+",
         help="Path to the weight files for the model. If you want to perform predictions "
         "for multiple models at once, you can pass them all as a space-separated list. "
         "If you have not trained a model, you can use the pre-trained model from the "
@@ -410,11 +408,11 @@ def predict_subparser(subparsers):
     )
 
     required_args.add_argument(
-        "--store_sequence",
+        "--header_only",
         action = argparse.BooleanOptionalAction,
-        default=True,
-        help="If True (--store_sequence), the output file will contain the sequences and headers.\n"
-                " Otherwise (--no-store_sequence), only the headers and score will be saved. (Default: True)"
+        default=False,
+        help="If this flag is set, the output file will not contain the sequences of the\n"
+                " input fasta. By default, PARM shows both the sequence and the header."
     )
 
     advanced_args = group.add_argument_group("Advanced arguments (if you trained your own model)")

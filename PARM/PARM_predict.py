@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 def PARM_predict(input : str,
                  output : str, 
-                 model_weights : list,
+                 model_directory : str,
                  n_seqs_per_batch : int = 1,
                  store_sequence : bool = True,
                  filter_size : int = 125,
@@ -26,8 +26,8 @@ def PARM_predict(input : str,
         Path to the input fasta file.
     output : str
         Path to the output file.
-    model_weights : list
-        List of paths to the PARM model weights. This should be a list even if there is only one model.
+    model_directory : str
+        Path to the directory containing all the folds of the PARM models. (e.g. K562/* , with K562/K562_fold1.parm, K562_fold2.parm, etc.)
     n_seqs_per_batch : int
         Number of batches to use for prediction. If your GPUs runs out of memory, might be because of that. Default is 1.
     
@@ -45,8 +45,20 @@ def PARM_predict(input : str,
     # Load models
     log("Loading models")
     complete_models = dict()
+    # Iterate over the model_directory and get the folds
+    model_weights = []
+    for file in os.listdir(model_directory):
+        if file.endswith(".parm"):
+            model_weights.append(os.path.join(model_directory, file))
+    if len(model_weights) == 0:
+        raise ValueError(f"No model files (.parm) found in {model_directory}. Please check the path and ensure it contains the model files."))
+    # Now, load the models
+    model_name = ""
     for model_weight in model_weights:
-        model_name = os.path.basename(model_weight).split(".")[0]
+        if model_name == "":
+            model_name = os.path.basename(model_weight).split("_fold")[0]
+        elif model_name != os.path.basename(model_weight).split("_fold")[0]:
+            raise ValueError(f"Model prefixes do not match: {model_name} and {os.path.basename(model_weight).split('_fold')[0]}. Please make sure that folds of the same model have the same prefix")
         complete_models["prediction_" + model_name] = load_PARM(model_weight, filter_size = filter_size, train=False,type_loss=type_loss)
     # Iterate over sequences and predict scores
     log("Making predictions")
@@ -66,9 +78,12 @@ def PARM_predict(input : str,
         
         # Get predictions for all models
         if (i+1) == n_seqs_per_batch or (i_record == (total_sequences-1)):
-            for model_name, model in complete_models.items():
-                tmp[model_name] = get_prediction(tmp.sequence.to_list(), model)
+            predictions_all_folds = []
+            for _, model in complete_models.items():
+                predictions_all_folds.append(get_prediction(tmp.sequence.to_list(), model))
                 pbar.update(1)
+            # Now, take the average of the predictions and add to the tmp[model_name] 
+            tmp[model_name] = np.mean(predictions_all_folds, axis=0)
 
             # Store in output df
             #IF it's the first batch, save the df with headers, otherwise, save only the scores

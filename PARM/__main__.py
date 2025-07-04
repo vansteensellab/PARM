@@ -131,7 +131,7 @@ def predict(args):
     print("=" * 80)
     PARM_predict(
         input=args.input,
-        model_weights=args.model,
+        model_directory=args.model,
         output=args.output,
         n_seqs_per_batch=args.n_seqs_per_batch,
         store_sequence= args.store_sequence,

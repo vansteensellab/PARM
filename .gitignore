@@ -11,3 +11,4 @@ src/
 PARM/__pycache__/*
 slurm_out/
 pre_trained_models/SuRE-prom-enh.parm
+example_data_output*

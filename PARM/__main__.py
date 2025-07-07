@@ -159,7 +159,7 @@ def mutagenesis(args):
     print("=" * 80)
     PARM_mutagenesis(
         input=args.input,
-        model_weights=args.model,
+        model_directory=args.model,
         output_directory=args.output,
         motif_database=args.motif_database,
         filter_size=args.filter_size,

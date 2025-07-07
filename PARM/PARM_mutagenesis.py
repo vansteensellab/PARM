@@ -19,7 +19,7 @@ import sys
 
 def PARM_mutagenesis(
     input: str,
-    model_weights: list,
+    model_directory: str,
     motif_database: str,
     output_directory: str,
     filter_size: int = 125,
@@ -56,15 +56,26 @@ def PARM_mutagenesis(
     # Loading motif database
     log("Loading motif database")
     PFM_hocomoco_dict, _, _ = dict_jaspar(file=motif_database, reverse=True)
+    # Iterate over the model_directory and get the folds
+    model_weights = []
+    for file in os.listdir(model_directory):
+        if file.endswith(".parm"):
+            model_weights.append(os.path.join(model_directory, file))
+    if len(model_weights) == 0:
+        raise ValueError(f"No model files (.parm) found in {model_directory}. Please check the path and ensure it contains the model files.")
     # Loading models
-    complete_models = dict()
+    complete_models = []
     model_name = ""
     for model_weight in model_weights:
         if model_name == "":
             model_name = os.path.basename(model_weight).split("_fold")[0]
         elif model_name != os.path.basename(model_weight).split("_fold")[0]:
-            raise ValueError(f"Model prefixes do not match: {model_name} and {os.path.basename(model_weight).split('_fold')[0]}. Please make sure that folds of the same model have the same prefix")
-        complete_models[model_name] = load_PARM(model_weight, filter_size = filter_size, train=False)
+            raise ValueError(
+                f"Model prefixes do not match: {model_name} and {os.path.basename(model_weight).split('_fold')[0]}. Please make sure that folds of the same model have the same prefix"
+            )
+        complete_models.append(
+            load_PARM(model_weight, filter_size=filter_size, train=False)
+        )
 
     # ====================================================================================
     # Parsing the fasta file =============================================================
@@ -75,27 +86,29 @@ def PARM_mutagenesis(
     for record in SeqIO.parse(input, "fasta"):
         sequence_ID = record.id
         sequence = str(record.seq).upper()
-        for model_name, model in complete_models.items():
-            mutagenesis_data = os.path.join(
-                output_directory, sequence_ID, "mutagenesis_" + sequence_ID + ".txt.gz"
+        mutagenesis_data = os.path.join(
+            output_directory,
+            sequence_ID,
+            "mutagenesis_" + sequence_ID + "_" + model_name + "model.txt.gz",
+        )
+        if os.path.exists(mutagenesis_data):
+            log(
+                f"WARNING: mutagenesis data for {sequence_ID} already exist. Skipping..."
             )
-            if os.path.exists(mutagenesis_data):
-                log(
-                    f"WARNING: mutagenesis data for {sequence_ID} already exist. Skipping..."
-                )
-            else:
-                create_dataframe_mutation_effect(
-                    name=sequence_ID,
-                    strand="+",
-                    model=model,
-                    output_directory=output_directory,
-                    PFM_hocomoco_dict=PFM_hocomoco_dict,
-                    L_max=600,
-                    reverse=False,
-                    seq=sequence,
-                    type_motif_scanning="PCC",
-                )
-            pbar.update(1)
+        else:
+            log(f"Computing mutagenesis for {sequence_ID}")
+            create_dataframe_mutation_effect(
+                name=sequence_ID,
+                strand="+",
+                models=complete_models,
+                output_directory=output_directory,
+                PFM_hocomoco_dict=PFM_hocomoco_dict,
+                L_max=600,
+                reverse=False,
+                seq=sequence,
+                type_motif_scanning="PCC",
+            )
+        pbar.update(1)
 
 
 def dict_jaspar(
@@ -353,7 +366,9 @@ def motif_attribution(
 
     # If the start_motif is a list, it should have the same length as seq
     if len(seq) != len(start_motif) or len(seq) != len(end_motif):
-        sys.exit(f"Error: Length of start_motif should be the same as the length of seq")
+        sys.exit(
+            f"Error: Length of start_motif should be the same as the length of seq"
+        )
     # Check if all motifs have the same length
     if len(set([end_motif[i] - start_motif[i] for i in range(len(seq))])) > 1:
         sys.exit(f"Error: All motifs should have the same length")
@@ -511,12 +526,12 @@ def peaks_scanning(
         Number of possible nucleotides.
     append : bool
         If True, the peaks will be appended with zeros.
-        
+
     Returns
     -------
     dict_scores : dict
         Dictionary with the scores of the peaks.
-        
+
     Examples
     --------
     >>> peaks_scanning(attribution, 5, 4, True)
@@ -683,13 +698,13 @@ def peaks_scanning(
 
 def compute_attribution(
     seq: str,
-    L_max : int,
-    start_motif : int,
-    end_motif : int,
-    completemodel : torch.nn.Module,
-    index_output : int = 0,
-    alt_nt : list = ["A", "C", "G", "T"],
-    window_del : bool = False,
+    L_max: int,
+    start_motif: int,
+    end_motif: int,
+    completemodel: torch.nn.Module,
+    index_output: int = 0,
+    alt_nt: list = ["A", "C", "G", "T"],
+    window_del: bool = False,
 ):
     """
     Computes saturation mutagenesis of a given region of a sequence (or the complete one) to determine
@@ -697,7 +712,7 @@ def compute_attribution(
 
     Basically it mutates every base to every other possible base. The importance of each base
     is determined by the SuRE score of that base - the mean SuRE score of the other possible 3 bases.
-    
+
     Parameters
     ----------
     seq : str
@@ -721,7 +736,7 @@ def compute_attribution(
     -------
     att : torch.Tensor
         Array of shape (n_bases, length_motif).
-        
+
     Examples
     --------
     >>> compute_attribution("ATCG", 600, 0, 4, model)
@@ -745,10 +760,10 @@ def compute_attribution(
 
 
 def compute_correlation_between_motifs(
-    pfm : np.array,
-    motif_attribution : np.array, 
-    ICM : np.array = False, 
-    return_PFM : bool = False
+    pfm: np.array,
+    motif_attribution: np.array,
+    ICM: np.array = False,
+    return_PFM: bool = False,
 ):
     """
     Normalizes motif attribution defined by model, and computes correlation
@@ -764,12 +779,12 @@ def compute_correlation_between_motifs(
         The Information Content Matrix of the motif database.
     return_PFM : bool
         If True, returns the PFM of the motif.
-        
+
     Returns
     -------
     rho_prob : float
         Correlation score between known PFM and the one of the attribution scores.
-        
+
     Examples
     --------
     >>> compute_correlation_between_motifs(pfm, motif_attribution, ICM, True)
@@ -852,15 +867,15 @@ def compute_correlation_between_motifs(
 
 
 def run_motif_scanning(
-    known_PFM : dict,
-    attribution_seq : np.array,
-    threshold : float = 0.6,
-    attribution : bool = False,
-    append : bool = True,
-    multiple_one_hot : bool = False,
-    normalize : bool = False,
-    split_pos_neg : bool = False,
-    cutoff_att : float = 0.001,
+    known_PFM: dict,
+    attribution_seq: np.array,
+    threshold: float = 0.6,
+    attribution: bool = False,
+    append: bool = True,
+    multiple_one_hot: bool = False,
+    normalize: bool = False,
+    split_pos_neg: bool = False,
+    cutoff_att: float = 0.001,
 ):
     """
     Parameters
@@ -889,11 +904,11 @@ def run_motif_scanning(
     -------
     hits : list
         Hits of list that contains [motif_name, correlation, start_hit, end_hit]
-        
+
     Examples
     --------
     >>> run_motif_scanning(known_PFM, attribution_seq, 0.6, False, True, False, False, 0.001)
-        
+
     """
 
     if append:
@@ -1128,10 +1143,10 @@ def run_motif_scanning(
 
 
 def slide_through_attribution_and_PFM_fast(
-    known_PFM : dict, 
-    attribution_seq : np.array, 
-    append : bool = True, 
-    cutoff_att : float = 0.001
+    known_PFM: dict,
+    attribution_seq: np.array,
+    append: bool = True,
+    cutoff_att: float = 0.001,
 ):
     """
     Slides through sequence, computes attribution and then check which motifs and where have a high correlation.
@@ -1146,12 +1161,12 @@ def slide_through_attribution_and_PFM_fast(
         If True, the peaks will be appended with zeros.
     cutoff_att : float
         Cutoff value for small attributions.
-        
+
     Returns
     -------
     hits : pd.DataFrame
         Hits of list that contains [motif_name, correlation, start_hit, att_abs_sum, length_motif]
-        
+
     Examples
     --------
     >>> slide_through_attribution_and_PFM_fast(known_PFM, attribution_seq, True, 0.001)
@@ -1226,11 +1241,11 @@ def slide_through_attribution_and_PFM_fast(
 
 
 def conv_with_PFM_slide_through_attribution(
-    known_PFM : dict, 
-    attribution_seq : np.array, 
-    multiple_one_hot : np.array = False, 
-    normalize : bool = False, 
-    sequence : bool = False
+    known_PFM: dict,
+    attribution_seq: np.array,
+    multiple_one_hot: np.array = False,
+    normalize: bool = False,
+    sequence: bool = False,
 ):
     """
     Slides through sequence of attribution and then computes convolution for each given motif.
@@ -1247,12 +1262,12 @@ def conv_with_PFM_slide_through_attribution(
         If normalize each base to add up to 1. If IC instead of PFM provided we recommend to not use it.
     sequence : bool
         If True, the attribution_seq is the sequence itself.
-        
+
     Returns
     -------
     hits : list
         Hits of list that contains [motif_name, correlation, start_hit, end_hit]
-        
+
     Examples
     --------
     >>> conv_with_PFM_slide_through_attribution(known_PFM, attribution_seq, False, False, False)
@@ -1424,17 +1439,17 @@ def conv_with_PFM_slide_through_attribution(
 # Plotting =====================================================================
 # ==============================================================================
 def PARM_plot_mutagenesis(
-    input : os.path,
-    correlation_threshold : float,
-    attribution_threshold : float,
-    plot_format : str,
-    output_directory : os.path = None,
-    attribution_range : list = None,
+    input: os.path,
+    correlation_threshold: float,
+    attribution_threshold: float,
+    plot_format: str,
+    output_directory: os.path = None,
+    attribution_range: list = None,
 ):
     """
     Generate the plots of the mutagenesis data (produced by PARM_mutagenesis.py).
     Output is saved in the output directory as an image file.
-    
+
     Parameters
     ----------
     input : os.path
@@ -1449,7 +1464,7 @@ def PARM_plot_mutagenesis(
         Output directory for the plots.
     attribution_range : list
         Range of the attribution values.
-        
+
     Examples
     --------
     >>> PARM_plot_mutagenesis(input, 0.5, 0.5, "png", output_directory, [0, 1])
@@ -1513,18 +1528,18 @@ def PARM_plot_mutagenesis(
 
 
 def plot_logo(
-    matrix : np.array,
-    ax_name : matplotlib.axis,
-    ylabel : str,
-    colors_base : int = False,
-    highlight_position : int = False,
-    fontsize : str = "medium",
-    max_lim : int = False,
-    min_lim : int = False,
+    matrix: np.array,
+    ax_name: matplotlib.axis,
+    ylabel: str,
+    colors_base: int = False,
+    highlight_position: int = False,
+    fontsize: str = "medium",
+    max_lim: int = False,
+    min_lim: int = False,
 ):
     """
     Make plot given axis of DNA sequence importance. This plots the logo of the sequence.
-    
+
     Parameters
     ----------
     matrix : np.array
@@ -1543,7 +1558,7 @@ def plot_logo(
         Maximum limit of the plot.
     min_lim : int
         Minimum limit of the plot.
-        
+
     Examples
     --------
     >>> plot_logo(matrix, ax_name, "ylabel", False, False, "medium", False, False)
@@ -1582,7 +1597,7 @@ def plot_logo(
 
 
 def find_hits_and_make_logo(
-    matrix : np.array,
+    matrix: np.array,
     ax_name,
     known_PFM,
     cutoff=0.8,
@@ -1590,8 +1605,8 @@ def find_hits_and_make_logo(
     best_motif_in_range=10,
     known_ICM=False,
     min_relative_attribution=0.15,
-    multiple_one_hot : np.array = False,
-    hits : pd.DataFrame = None,
+    multiple_one_hot: np.array = False,
+    hits: pd.DataFrame = None,
     fig=None,
     split_pos_neg=False,
 ):
@@ -1647,7 +1662,9 @@ def find_hits_and_make_logo(
 
     # Take only hits that their mean attribution is at least 10% of the letter wiht max attribution
 
-    hits = hits[hits.att_x_PFM.abs() > (hits.att_x_PFM.abs().max() * min_relative_attribution)]
+    hits = hits[
+        hits.att_x_PFM.abs() > (hits.att_x_PFM.abs().max() * min_relative_attribution)
+    ]
 
     # Avoid overlapping hits
     hits["rho_abs"] = np.abs(hits.rho)
@@ -1802,7 +1819,7 @@ def find_hits_and_make_logo(
 def create_dataframe_mutation_effect(
     name,
     strand,
-    model,
+    models,
     output_directory,
     PFM_hocomoco_dict,
     L_max,
@@ -1814,7 +1831,7 @@ def create_dataframe_mutation_effect(
     """
     Return a dataframe with the effect of each mutation.
     Args:
-            model: pytorch model
+            models: list of models to use for the mutagenesis
             promoters: (pd.Series) pandas series that contains chr, start, end, strand for each promoter
             output_directory: (str) Output directory to save all hits and mutagenesis dataframe.
             L_max: (int) Length max. of the model
@@ -1826,7 +1843,9 @@ def create_dataframe_mutation_effect(
     """
 
     if type_motif_scanning != "PCC" and type_motif_scanning != "conv_scanning":
-        sys.exit(f'Error: Type of motif scanning should be either "PCC" or "conv_scanning", but you selected {type_motif_scanning}')
+        sys.exit(
+            f'Error: Type of motif scanning should be either "PCC" or "conv_scanning", but you selected {type_motif_scanning}'
+        )
     # Create folder if it doesn't exist
 
     folder_output = os.path.join(output_directory, f"{name}")
@@ -1841,11 +1860,11 @@ def create_dataframe_mutation_effect(
 
     # Mutagenesis file
     file_mutagenesis = os.path.join(folder_output, f"mutagenesis_{name}.txt.gz")
-
-    promoter_importance_base = pd.DataFrame()
-
-    if not os.path.exists(file_mutagenesis):
-
+    fold_count = 0
+    mutagenesis_all_folds = pd.DataFrame()
+    for model in models:
+        log(f"Computing mutagenesis for fold {fold_count} of {len(models)}")
+        fold_count += 1
         att_all, _ = compute_attribution(
             seq=seq, L_max=L_max, start_motif=0, end_motif=len(seq), completemodel=model
         )
@@ -1870,19 +1889,12 @@ def create_dataframe_mutation_effect(
                 np.stack([att_all, np.flip(att_all_rev, (0, 1))], axis=0), axis=0
             )
 
-        start = 1
-        end = len(seq)
-        start_end = list(range(start, end))
-
-        if np.all(strand == "-"):
-            start_end = list(range(end, start, -1))
-
-        if np.all(strand == "+"):
-            start_end = list(range(start, end))
-
         promoter_importance_base_single = pd.DataFrame(
             {
                 "Ref": list(seq),
+                "pos": list(
+                    range(len(seq))
+                ),  # Add position to make sure the avg will be done right
                 "A": att_all[0, :],
                 "C": att_all[1, :],
                 "G": att_all[2, :],
@@ -1890,24 +1902,40 @@ def create_dataframe_mutation_effect(
             }
         )
 
-        promoter_importance_base = pd.concat(
-            [promoter_importance_base, promoter_importance_base_single]
+        mutagenesis_all_folds = pd.concat(
+            [mutagenesis_all_folds, promoter_importance_base_single]
         )
+    log("Done computing mutagenesis for all folds. Now averaging.")
+    # After done for all folds, take the mean importance for each nucleotide.
+    # First, melt the dataframe to have a long format
+    mutagenesis_all_folds = mutagenesis_all_folds.melt(
+        id_vars=["Ref", "pos"], var_name="mut", value_name="score"
+    )
+    # make zero if the reference nucleotide is the same as the mutation
+    mutagenesis_all_folds.loc[
+        mutagenesis_all_folds["Ref"] == mutagenesis_all_folds["mut"], "score"
+    ] = 0
+    # Now, average the importance for each nucleotide in each position
+    mutagenesis_averaged = (
+        mutagenesis_all_folds.groupby(["pos", "mut", "Ref"], as_index=False)
+        .agg({"score": "mean"})
+        .reset_index(drop=False)
+    )
+    print(mutagenesis_averaged)
+    mutagenesis_averaged.to_csv(
+        file_mutagenesis,
+        index=False,
+        sep="\t",
+        compression={"method": "gzip", "compresslevel": 5},
+    )
 
-        promoter_importance_base.to_csv(
-            file_mutagenesis,
-            index=False,
-            sep="\t",
-            compression={"method": "gzip", "compresslevel": 5},
-        )
-
-    else:
-        try:
-            promoter_importance_base = pd.read_csv(file_mutagenesis, sep="\t")
-        except:
-            promoter_importance_base = pd.read_csv(
-                file_mutagenesis, sep="\t", compression="gzip"
-            )
+    # else:
+    #     try:
+    #         promoter_importance_base = pd.read_csv(file_mutagenesis, sep="\t")
+    #     except:
+    #         promoter_importance_base = pd.read_csv(
+    #             file_mutagenesis, sep="\t", compression="gzip"
+    #         )
 
     # Now compute hits
 
@@ -1915,7 +1943,7 @@ def create_dataframe_mutation_effect(
 
     onehot_seq = get_one_hot(["".join(seq)], L_max=len(seq))[0]
 
-    plot_promoter = promoter_importance_base[["A", "C", "G", "T"]]
+    plot_promoter = mutagenesis_averaged[["A", "C", "G", "T"]]
 
     vector_importance = plot_promoter.mean(axis=1)
     attribution_real = np.transpose(onehot_seq * np.expand_dims(vector_importance, 1))

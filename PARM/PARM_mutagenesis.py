@@ -22,6 +22,7 @@ def PARM_mutagenesis(
     model_weights: list,
     motif_database: str,
     output_directory: str,
+    filter_size: int = 125,
 ):
     """
     Function to execute the in-silico mutageesis of a sequence using the PARM models.
@@ -39,6 +40,8 @@ def PARM_mutagenesis(
         Path to the motif database. Usually this is the HOCOMOCO database.
     output_directory : str
         Path to the output directory where the results will be saved.
+    filter_size : int
+        Size of the filter to use for the PARM model. Default is 125.
 
     Returns
     -------
@@ -55,11 +58,13 @@ def PARM_mutagenesis(
     PFM_hocomoco_dict, _, _ = dict_jaspar(file=motif_database, reverse=True)
     # Loading models
     complete_models = dict()
-    for model in model_weights:
-        model_name = os.path.basename(model).split(".parm")[0]
-        log(f"Loading model {model_name}")
-        complete_models[model_name] = load_PARM(model)
-        parm_scores[model_name] = dict()
+    model_name = ""
+    for model_weight in model_weights:
+        if model_name == "":
+            model_name = os.path.basename(model_weight).split("_fold")[0]
+        elif model_name != os.path.basename(model_weight).split("_fold")[0]:
+            raise ValueError(f"Model prefixes do not match: {model_name} and {os.path.basename(model_weight).split('_fold')[0]}. Please make sure that folds of the same model have the same prefix")
+        complete_models[model_name] = load_PARM(model_weight, filter_size = filter_size, train=False)
 
     # ====================================================================================
     # Parsing the fasta file =============================================================
@@ -91,23 +96,6 @@ def PARM_mutagenesis(
                     type_motif_scanning="PCC",
                 )
             pbar.update(1)
-        #     # save the parm score of this sequence to the predictions dict
-        #     # -- this will be used later to have the predictions in the title of
-        #     #    the plot
-        #     parm_scores[model_name][sequence_ID] = parm_score
-        #     # Now plot the data
-        #     fig, _ = plot_mutagenesis_results(
-        #         sequence=sequence,
-        #         mutagenesis_df=mutagenesis_df,
-        #         motif_scanning_results=motif_scanning_results,
-        #         sequence_onehot=sequence_onehot,
-        #         sequence_score=parm_score,
-        #         model_name=model_name,
-        #         motif_db_ICT=motif_db_ICT,
-        #     )
-        #     output_pdf.savefig(fig)
-        #     pbar.update(1)
-        # output_pdf.close()
 
 
 def dict_jaspar(

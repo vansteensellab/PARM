@@ -162,6 +162,7 @@ def mutagenesis(args):
         model_weights=args.model,
         output_directory=args.output,
         motif_database=args.motif_database,
+        filter_size=args.filter_size,
     )
 
 
@@ -438,7 +439,8 @@ def predict_subparser(subparsers):
         default = 'poisson',
         choices=['MSE', 'poisson', 'heteroscedastic'],
         type = str,
-        help=' Type of criterion. Possibilities: MSE or poison. (Default: poisson) \n')
+        help=' Type of loss function to use for the model. Default is "poisson". Other options are "MSE" and "heteroscedastic".'
+    )
 
     other_args = group.add_argument_group("Other")
     other_args.add_argument(
@@ -508,6 +510,12 @@ def mutagenesis_subparser(subparsers):
         help="The maximum length of the sequences allowed by the model. All pre-trained models "
         "have `--L_max 600`. However, if you trained your own PARM model with a different L_max value, "
         "you should specify it here. (Default: 600)"
+    )
+    advanced_args.add_argument(
+        "--filter_size",
+        type=int,
+        default=125,
+        help="The model size that torch expects (Default: 125) "
     )
     #
     other_args = group.add_argument_group("Other")

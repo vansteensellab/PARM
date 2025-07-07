@@ -15,7 +15,7 @@ def PARM_predict(input : str,
                  n_seqs_per_batch : int = 1,
                  store_sequence : bool = True,
                  filter_size : int = 125,
-                type_loss: str = 'poisson'):
+                 type_loss: str = 'poisson'):
     """
     Reads the input (fasta file) and predicts promoter activity scores using the PARM models.
     Writes the output as tab-separated values, where each column is a model and each row is a sequence.
@@ -30,11 +30,12 @@ def PARM_predict(input : str,
         Path to the directory containing all the folds of the PARM models. (e.g. K562/* , with K562/K562_fold1.parm, K562_fold2.parm, etc.)
     n_seqs_per_batch : int
         Number of batches to use for prediction. If your GPUs runs out of memory, might be because of that. Default is 1.
-    
     store_sequence : bool
         If True, the output file will contain the sequences and headers. Otherwise, only the headers and score will be saved. Default is True.
-        
-    Returns
+    filter_size : int
+        Size of the filter to use for the PARM model. Default is 125.
+    type_loss : str
+        Type of loss function to use for the model. Default is 'poisson'. Other options are 'MSE' and 'heteroscedastic'.
     -------
     None
     

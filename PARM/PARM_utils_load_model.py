@@ -10,6 +10,7 @@ def load_PARM(
     n_block: int = 5,
     filter_size: int = 125,
     train: bool = False,
+    type_loss: str = 'poisson',
 ):
     """
     Function to load the PARM model given a weight file.
@@ -36,12 +37,14 @@ def load_PARM(
     --------
     >>> model = load_PARM("model.parm")
     """
-    model = ResNet_Attentionpool(L_max=L_max, n_block=n_block, filter_size=filter_size)
+    
     if train:
+        model = ResNet_Attentionpool(L_max=L_max, n_block=n_block, filter_size=filter_size, weight_file=weight_file, type_loss=type_loss)
         if torch.cuda.is_available():
             model = model.cuda()
         return model
     else:
+        model = ResNet_Attentionpool(L_max=L_max, n_block=n_block, filter_size=filter_size, weight_file=weight_file, type_loss=type_loss, validation=True)
         model_weights = torch.load(weight_file, map_location=torch.device("cpu"))
         model.load_state_dict(model_weights)
         if torch.cuda.is_available():
@@ -107,8 +110,11 @@ class AttentionPool(nn.Module):
 
 class ResNet_Attentionpool(nn.Module):
 
-    def __init__(self, L_max, n_block, filter_size=125):
+    def __init__(self, L_max, n_block, filter_size=125, weight_file=None, type_loss='poisson', validation=False):
         super(ResNet_Attentionpool, self).__init__()
+
+        self.type_loss = type_loss
+        self.validation = validation
 
         self.L_max = L_max  # Max length of sequence
         self.vocab = 4  # N nucleotides
@@ -117,6 +123,8 @@ class ResNet_Attentionpool(nn.Module):
         stem_kernel_size = 7
 
         self.n_blocks = n_block
+
+        # if '_TSS_EnhA_' in weight_file: filter_size = int(filter_size*2.4)
 
         ##################
         # create stem
@@ -147,7 +155,10 @@ class ResNet_Attentionpool(nn.Module):
 
         self.conv_tower = nn.Sequential(*conv_layers)
 
-        self.linear1 = nn.LazyLinear(out_features=1)
+        if self.type_loss == 'heteroscedastic':
+            self.log_var = nn.Linear(filter_size, 1)
+            
+        self.linear1 = nn.Linear(filter_size, 1)
         self.relu = nn.ReLU()
 
         #################
@@ -164,6 +175,13 @@ class ResNet_Attentionpool(nn.Module):
 
         out = self.linear1(out)
 
-        out = self.relu(out)
+        if self.type_loss == 'heteroscedastic':
+            mu = self.linear1(out)
+            log_var = self.log_var(out)  # Log variance
+            #return(mu)
+            if self.validation: return mu
+            return mu, log_var
+
+        if self.type_loss == 'poisson': out = self.relu(out)
 
         return out

@@ -121,16 +121,22 @@ def predict(args):
     print("=" * 80)
     print("{: ^80}".format("Predict"))
     print("-" * 80)
-    models = ",".join(args.model)
-    print_arguments("Model", models)
+    print_arguments("Model", args.model)
     print_arguments("Input", args.input)
     print_arguments("Output", args.output)
+    print_arguments("Number of batches", args.n_seqs_per_batch)
+    print_arguments("Show only sequence's header in the output file?", args.header_only)
+    print_arguments("Model filter size ", args.filter_size)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_predict(
         input=args.input,
-        model_weights=args.model,
+        model_directory=args.model,
         output=args.output,
+        n_seqs_per_batch=args.n_seqs_per_batch,
+        store_sequence=not args.header_only,
+        filter_size= args.filter_size,
+        type_loss=args.type_loss
     )
 
 
@@ -141,8 +147,8 @@ def mutagenesis(args):
     print("=" * 80)
     print("{: ^80}".format("Mutagenesis"))
     print("-" * 80)
-    models = ",".join(args.model)
-    print_arguments("Model", models)
+    # models = ",".join(args.model)
+    print_arguments("Model", args.model)
     print_arguments("Input", args.input)
     print_arguments("Output", args.output)
     # check if args.motif_database is the default
@@ -154,9 +160,10 @@ def mutagenesis(args):
     print("=" * 80)
     PARM_mutagenesis(
         input=args.input,
-        model_weights=args.model,
+        model_directory=args.model,
         output_directory=args.output,
         motif_database=args.motif_database,
+        filter_size=args.filter_size,
     )
 
 
@@ -384,11 +391,10 @@ def predict_subparser(subparsers):
     required_args.add_argument(
         "--model",
         required=True,
-        nargs="+",
-        help="Path to the weight files for the model. If you want to perform predictions "
-        "for multiple models at once, you can pass them all as a space-separated list. "
-        "If you have not trained a model, you can use the pre-trained model from the "
-        "pre_trained_models directory.",
+        help="Path to the directory of the model. If you want to perform predictions "
+        "for the pre-trained K562 model, for instance, this should be "
+        "pre_trained_models/K562. If you have trained your own model, "
+        "you should pass the path to the directory where the .parm files are stored. ",
     )
     required_args.add_argument(
         "--input",
@@ -401,7 +407,22 @@ def predict_subparser(subparsers):
         help="Path to the output file where the predictions will be saved. Output is a "
         "tab-separated file with the sequence, header, and the predicted score.",
     )
-    
+
+    required_args.add_argument(
+        "--n_seqs_per_batch",
+        type=int,
+        default=1,
+        help=" Number of sequences to predict simultaneously, increase only if your memory allows it. (Default: 1)"
+    )
+
+    required_args.add_argument(
+        "--header_only",
+        action = argparse.BooleanOptionalAction,
+        default=False,
+        help="If this flag is set, the output file will not contain the sequences of the\n"
+                " input fasta. By default, PARM shows both the sequence and the header."
+    )
+
     advanced_args = group.add_argument_group("Advanced arguments (if you trained your own model)")
 
     advanced_args.add_argument(
@@ -411,6 +432,21 @@ def predict_subparser(subparsers):
         help="The maximum length of the sequences allowed by the model. All pre-trained models "
         "have `--L_max 600`. However, if you trained your own PARM model with a different L_max value, "
         "you should specify it here. (Default: 600)"
+    )
+
+    advanced_args.add_argument(
+        "--filter_size",
+        type=int,
+        default=125,
+        help="The model size that torch expects (Default: 125) "
+    )
+
+    advanced_args.add_argument(
+        "--type_loss",
+        default = 'poisson',
+        choices=['MSE', 'poisson', 'heteroscedastic'],
+        type = str,
+        help=' Type of loss function to use for the model. Default is "poisson". Other options are "MSE" and "heteroscedastic".'
     )
 
     other_args = group.add_argument_group("Other")
@@ -447,12 +483,11 @@ def mutagenesis_subparser(subparsers):
 
     required_args.add_argument(
         "--model",
-        nargs="+",
         required=True,
-        help="Path to the weight files for the model. If you want to perform predictions "
-        "for multiple models at once, you can pass them all as a space-separated list. "
-        "If you have not trained a model, you can use the pre-trained model from the "
-        "default_PARM_models directory.",
+        help="Path to the directory of the model. If you want to perform predictions "
+        "for the pre-trained K562 model, for instance, this should be "
+        "pre_trained_models/K562. If you have trained your own model, "
+        "you should pass the path to the directory where the .parm files are stored. ",
     )
     required_args.add_argument(
         "--input",
@@ -482,6 +517,12 @@ def mutagenesis_subparser(subparsers):
         help="The maximum length of the sequences allowed by the model. All pre-trained models "
         "have `--L_max 600`. However, if you trained your own PARM model with a different L_max value, "
         "you should specify it here. (Default: 600)"
+    )
+    advanced_args.add_argument(
+        "--filter_size",
+        type=int,
+        default=125,
+        help="The model size that torch expects (Default: 125) "
     )
     #
     other_args = group.add_argument_group("Other")

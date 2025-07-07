@@ -3,3 +3,13 @@ build/
 parm.egg-info/
 .DS_Store
 ._.DS_Store
+conda.list
+data/
+example_data/foo
+src/
+.Rhistory
+PARM/__pycache__/*
+slurm_out/
+pre_trained_models/SuRE-prom-enh.parm
+example_data_output*
+test_fold*

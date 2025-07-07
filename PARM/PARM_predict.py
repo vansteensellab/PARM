@@ -11,7 +11,11 @@ from tqdm import tqdm
 
 def PARM_predict(input : str,
                  output : str, 
-                 model_weights : list):
+                 model_directory : str,
+                 n_seqs_per_batch : int = 1,
+                 store_sequence : bool = True,
+                 filter_size : int = 125,
+                 type_loss: str = 'poisson'):
     """
     Reads the input (fasta file) and predicts promoter activity scores using the PARM models.
     Writes the output as tab-separated values, where each column is a model and each row is a sequence.
@@ -22,10 +26,16 @@ def PARM_predict(input : str,
         Path to the input fasta file.
     output : str
         Path to the output file.
-    model_weights : list
-        List of paths to the PARM model weights. This should be a list even if there is only one model.
-        
-    Returns
+    model_directory : str
+        Path to the directory containing all the folds of the PARM models. (e.g. K562/* , with K562/K562_fold1.parm, K562_fold2.parm, etc.)
+    n_seqs_per_batch : int
+        Number of batches to use for prediction. If your GPUs runs out of memory, might be because of that. Default is 1.
+    store_sequence : bool
+        If True, the output file will contain the sequences and headers. Otherwise, only the headers and score will be saved. Default is True.
+    filter_size : int
+        Size of the filter to use for the PARM model. Default is 125.
+    type_loss : str
+        Type of loss function to use for the model. Default is 'poisson'. Other options are 'MSE' and 'heteroscedastic'.
     -------
     None
     
@@ -36,45 +46,80 @@ def PARM_predict(input : str,
     # Load models
     log("Loading models")
     complete_models = dict()
+    # Iterate over the model_directory and get the folds
+    model_weights = []
+    for file in os.listdir(model_directory):
+        if file.endswith(".parm"):
+            model_weights.append(os.path.join(model_directory, file))
+    if len(model_weights) == 0:
+        raise ValueError(f"No model files (.parm) found in {model_directory}. Please check the path and ensure it contains the model files.")
+    # Now, load the models
+    model_name = ""
     for model_weight in model_weights:
-        model_name = os.path.basename(model_weight).split(".")[0]
-        complete_models["prediction_" + model_name] = load_PARM(model_weight)
+        if model_name == "":
+            model_name = os.path.basename(model_weight).split("_fold")[0]
+        elif model_name != os.path.basename(model_weight).split("_fold")[0]:
+            raise ValueError(f"Model prefixes do not match: {model_name} and {os.path.basename(model_weight).split('_fold')[0]}. Please make sure that folds of the same model have the same prefix")
+        complete_models["prediction_" + model_name] = load_PARM(model_weight, filter_size = filter_size, train=False,type_loss=type_loss)
     # Iterate over sequences and predict scores
     log("Making predictions")
-    total_interactions = sum(1 for _ in SeqIO.parse(input, "fasta")) * len(
+    total_sequences = sum(1 for _ in SeqIO.parse(input, "fasta"))
+    log(f"Total sequences: {total_sequences}")
+    total_interactions = total_sequences * len(
         complete_models
     )
-    pbar = tqdm(total=total_interactions, ncols=80)
-    output_df = pd.DataFrame()
-    for record in SeqIO.parse(input, "fasta"):
+    pbar = tqdm(total=int(total_interactions/n_seqs_per_batch), ncols=80)
+
+    i = 0
+    for i_record, record in enumerate(SeqIO.parse(input, "fasta")):
         # Initiate output df
         sequence = str(record.seq).upper()
-        tmp = pd.DataFrame({"sequence": [sequence], "header": [record.id]})
+        if i ==0: tmp = pd.DataFrame({"sequence": [sequence], "header": [record.id]})
+        else: tmp = pd.concat([tmp, pd.DataFrame({"sequence": [sequence], "header": [record.id]})])
+        
         # Get predictions for all models
-        for model_name, model in complete_models.items():
-            tmp[model_name] = get_prediction(sequence, model)
-            pbar.update(1)
-        # Store in output df
-        output_df = pd.concat([output_df, tmp], axis=0, ignore_index=True)
+        if (i+1) == n_seqs_per_batch or (i_record == (total_sequences-1)):
+            predictions_all_folds = []
+            for _, model in complete_models.items():
+                predictions_all_folds.append(get_prediction(tmp.sequence.to_list(), model))
+                pbar.update(1)
+            # Now, take the average of the predictions and add to the tmp[model_name] 
+            tmp["prediction_" + model_name] = np.mean(predictions_all_folds, axis=0)
+
+            # Store in output df
+            #IF it's the first batch, save the df with headers, otherwise, save only the scores
+            if i_record < n_seqs_per_batch: 
+                if store_sequence: tmp.to_csv(output, sep="\t", index=False)
+                else: (tmp.drop(columns=["sequence"])).to_csv(output, sep="\t", index=False)
+            else:
+                if store_sequence: tmp.to_csv(output, sep="\t", index=False, mode='a', header=False)
+                else: (tmp.drop(columns=["sequence"])).to_csv(output, sep="\t", index=False, mode='a', header=False)
+
+            i = 0
+            
+            
+        else: i += 1
     # Write output
     pbar.close()
-    log("Writing output file")
-    output_df.to_csv(output, sep="\t", index=False)
+    log("Finish output file")
 
 
 def get_prediction(sequence, complete_model):
     """
     Predicts promoter activity score for input sequence
     """
+    #Check if sequence is a list or not and make it a list if not
+    if not isinstance(sequence, list): sequence = [sequence]
+
     if torch.cuda.is_available():
         complete_model = complete_model.cuda()
     onehot_fragment = torch.tensor(
-        np.float32(sequence_to_onehot([sequence], L_max=len(sequence)))
+        np.float32(sequence_to_onehot(sequence, L_max=len(sequence[0])))
     ).permute(0, 2, 1)
     if torch.cuda.is_available():
         onehot_fragment = onehot_fragment.cuda()
-    score = complete_model(onehot_fragment).item()
-
+    score = complete_model(onehot_fragment).cpu().detach().numpy()
+    
     return score
 
 

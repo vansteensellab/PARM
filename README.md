@@ -12,7 +12,7 @@
 PARM (Promoter Activity Regulatory Model) is a deep learning model that predicts the promoter activity from the DNA sequence itself.
 As a convolution neural network trained on MPRA data, **PARM** is very lightweight and produces predictions in a cell-type-specific manner.
 
-With the `PARM predict` tool, you can get predictions for any sequence that you want for K562, HepG2, MCF7, LNCaP, or HCT116 cells. 
+With the `PARM predict` tool, you can get predictions for any sequence that you want for AGS, HAP1, HCT116, HEK116, HepG2, K562, LNCaP, MCF7, and U2OS cells.
 
 With `PARM mutagenesis`, in addition to simple promoter activity scores, **PARM** can also produce the so-called _in-silico_ mutagenesis plot.
 This is useful for predicting which TFs are regulating (activating or repressing) your sequence. (read more on [Running _in-silico_ mutagenesis](#running-in-silico-mutagenesis)).
@@ -35,32 +35,24 @@ To predict the promoter activity in K562 of every sequence in a fasta file, run:
 parm predict \
   --input example_data/input.fasta \
   --output output_K562.txt \
-  --model pre_trained_models/K562.parm
+  --model pre_trained_models/K562/
 ```
 
-> Note that you should replace `pre_trained_models/K562.parm` with the actual path to the pre-trained models available on this page.
-
-To perform predictions for more than one cell, you can simply provide all the paths separated by space:
-
-```sh
-parm predict \
-  --input example_data/input.fasta \
-  --output output_K562_HepG2_LNCaP.txt \
-  --model pre_trained_models/K562.parm pre_trained_models/HepG2.parm pre_trained_models/LNCaP.parm
-```
+> Note that you should replace `pre_trained_models/K562/` with the actual path to the pre-trained models available on this page.
+> Also, note that a PARM model is composed of five different folds, as each model is trained five times. If you check the content of `pre_trained_models/K562/`,
+> you will see the `.parm` files there, one for each fold. Do not rename or change the files there unless you know what you are doing.
 
 The output is a tab-separated file. 
 The first and second columns contain information about the sequence (the sequence and its header).
-The following column contains the predicted promoter activity for the model you have selected. 
-If you performed predictions for more than one cell, more than one column will be created here.
+The following column contains the predicted promoter activity for the model you have selected.
 
 For the command line above, you should expect the following result:
 
-| sequence    | header                           | prediction_K562   | prediction_HepG2   | prediction_LNCaP    |
-|-------------|----------------------------------|-------------------|--------------------|---------------------|
-| CTGGGAGG... | CXCR4_chr2:136875708:136875939:- | 2.287095785140991 | 1.4889564514160156 | 0.2345067262649536  |
-| GCAACTAA... | MED16_chr19:893131:893362:-      | 2.22406268119812  | 2.6182565689086914 | 0.30299943685531616 |
-| ACGCCCAG... | TERT_chr5:1295135:1295366:-      | 1.993780255317688 | 1.474591612815857  | 0.11847741901874542 |
+| sequence    | header                           | prediction_K562   |
+|-------------|----------------------------------|-------------------|
+| CTGGGAGG... | CXCR4_chr2:136875708:136875939:- | 2.287095785140991 |
+| GCAACTAA... | MED16_chr19:893131:893362:-      | 2.22406268119812  |
+| ACGCCCAG... | TERT_chr5:1295135:1295366:-      | 1.993780255317688 |
 
 
 ## Running _in-silico_ mutagenesis
@@ -71,16 +63,7 @@ To compute the _in-silico_ mutagenesis for every sequence in a fasta file, run:
 parm mutagenesis \
   --input example_data/input.fasta \
   --output in_silico_mutagenesis_K562 \
-  --model pre_trained_models/K562.parm
-```
-
-You can also run `PARM mutagenesis` for more than one cell:
-
-```sh
-parm mutagenesis \
-  --input input.fasta \
-  --output in_silico_mutagenesis_K562_HepG2_LNCaP \
-  --model pre_trained_models/K562.parm pre_trained_models/HepG2.parm pre_trained_models/LNCaP.parm
+  --model pre_trained_models/K562/
 ```
 
 For every sequence in the input fasta, **PARM** will predict the effect of every possible mutation of every single base pair.
@@ -108,5 +91,6 @@ parm plot \
 This will read the mutagenesis matrix and the hits for the sequence `sequence_of_interest` and generate the plot.
 By default, **PARM** stored the result plot as a PDF inside the input dir.
 This can be changed using optional arguments. 
+
 Run `parm plot --help` for additional help on that.
 

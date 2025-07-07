@@ -62,7 +62,9 @@ def PARM_mutagenesis(
         if file.endswith(".parm"):
             model_weights.append(os.path.join(model_directory, file))
     if len(model_weights) == 0:
-        raise ValueError(f"No model files (.parm) found in {model_directory}. Please check the path and ensure it contains the model files.")
+        raise ValueError(
+            f"No model files (.parm) found in {model_directory}. Please check the path and ensure it contains the model files."
+        )
     # Loading models
     complete_models = []
     model_name = ""
@@ -96,10 +98,8 @@ def PARM_mutagenesis(
                 f"WARNING: mutagenesis data for {sequence_ID} already exist. Skipping..."
             )
         else:
-            log(f"Computing mutagenesis for {sequence_ID}")
             create_dataframe_mutation_effect(
-                name=sequence_ID,
-                strand="+",
+                name=sequence_ID + "_" + model_name + "model",
                 models=complete_models,
                 output_directory=output_directory,
                 PFM_hocomoco_dict=PFM_hocomoco_dict,
@@ -107,8 +107,8 @@ def PARM_mutagenesis(
                 reverse=False,
                 seq=sequence,
                 type_motif_scanning="PCC",
+                pbar=pbar,
             )
-        pbar.update(1)
 
 
 def dict_jaspar(
@@ -1818,11 +1818,11 @@ def find_hits_and_make_logo(
 # function to save the effect of every possible mutations
 def create_dataframe_mutation_effect(
     name,
-    strand,
     models,
     output_directory,
     PFM_hocomoco_dict,
     L_max,
+    pbar,
     reverse=False,
     seq=False,
     type_motif_scanning="PCC",
@@ -1840,6 +1840,7 @@ def create_dataframe_mutation_effect(
             reverse: (bool) If True, compute also for reverse attribution and do the mean with the forward
             seq: (str) If seq is given, not compute sequence from genome.
             type_motif_scanning: (str) Either 'PCC' or 'conv_scanning'
+            
     """
 
     if type_motif_scanning != "PCC" and type_motif_scanning != "conv_scanning":
@@ -1863,7 +1864,6 @@ def create_dataframe_mutation_effect(
     fold_count = 0
     mutagenesis_all_folds = pd.DataFrame()
     for model in models:
-        log(f"Computing mutagenesis for fold {fold_count} of {len(models)}")
         fold_count += 1
         att_all, _ = compute_attribution(
             seq=seq, L_max=L_max, start_motif=0, end_motif=len(seq), completemodel=model
@@ -1901,11 +1901,10 @@ def create_dataframe_mutation_effect(
                 "T": att_all[3, :],
             }
         )
-
         mutagenesis_all_folds = pd.concat(
             [mutagenesis_all_folds, promoter_importance_base_single]
         )
-    log("Done computing mutagenesis for all folds. Now averaging.")
+        pbar.update(1)
     # After done for all folds, take the mean importance for each nucleotide.
     # First, melt the dataframe to have a long format
     mutagenesis_all_folds = mutagenesis_all_folds.melt(
@@ -1921,7 +1920,10 @@ def create_dataframe_mutation_effect(
         .agg({"score": "mean"})
         .reset_index(drop=False)
     )
-    print(mutagenesis_averaged)
+    # Pivot back to the original format
+    mutagenesis_averaged = mutagenesis_averaged.pivot_table(
+        index=["pos", "Ref"], columns="mut", values="score"
+    ).reset_index()
     mutagenesis_averaged.to_csv(
         file_mutagenesis,
         index=False,

@@ -383,10 +383,10 @@ def predict_subparser(subparsers):
     required_args.add_argument(
         "--model",
         required=True,
-        help="Path to the weight files for the model. If you want to perform predictions "
-        "for multiple models at once, you can pass them all as a space-separated list. "
-        "If you have not trained a model, you can use the pre-trained model from the "
-        "pre_trained_models directory.",
+        help="Path to the directory of the model. If you want to perform predictions "
+        "for the pre-trained K562 model, for instance, this should be "
+        "pre_trained_models/K562. If you have trained your own model, "
+        "you should pass the path to the directory where the .parm files are stored. ",
     )
     required_args.add_argument(
         "--input",
@@ -474,12 +474,11 @@ def mutagenesis_subparser(subparsers):
 
     required_args.add_argument(
         "--model",
-        nargs="+",
         required=True,
-        help="Path to the weight files for the model. If you want to perform predictions "
-        "for multiple models at once, you can pass them all as a space-separated list. "
-        "If you have not trained a model, you can use the pre-trained model from the "
-        "default_PARM_models directory.",
+        help="Path to the directory of the model. If you want to perform predictions "
+        "for the pre-trained K562 model, for instance, this should be "
+        "pre_trained_models/K562. If you have trained your own model, "
+        "you should pass the path to the directory where the .parm files are stored. ",
     )
     required_args.add_argument(
         "--input",

@@ -58,10 +58,6 @@ def PARM_train(args):
     
     log(f"Cuda working? {torch.cuda.is_available()}")
 
-    log(f"Output directory: {output_directory}")
-
-    log(f"Input Directory {input_directory}")
-
     # Check if validation data is in training data
     error = any(
         file_validation in input_directory for file_validation in validation_path
@@ -523,7 +519,7 @@ def validation_loop(
         y_val_predicted.flatten(),
         y_val_real.flatten(),
         bins=(100,100),
-        norm=colors.LogNorm()
+        norm=colors.LogNorm(),
         cmap="viridis",
     )
     corrfunc(y_val_predicted.flatten(), y_val_real.flatten(), ax=ax)

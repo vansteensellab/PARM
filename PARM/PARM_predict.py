@@ -15,7 +15,8 @@ def PARM_predict(input : str,
                  n_seqs_per_batch : int = 1,
                  store_sequence : bool = True,
                  filter_size : int = 125,
-                 type_loss: str = 'poisson'):
+                 type_loss: str = 'poisson',
+                 test_fold: bool = False):
     """
     Reads the input (fasta file) and predicts promoter activity scores using the PARM models.
     Writes the output as tab-separated values, where each column is a model and each row is a sequence.
@@ -36,6 +37,8 @@ def PARM_predict(input : str,
         Size of the filter to use for the PARM model. Default is 125.
     type_loss : str
         Type of loss function to use for the model. Default is 'poisson'. Other options are 'MSE' and 'heteroscedastic'.
+    test_fold : bool
+        If True, the function will consider that the input is a hdf5 file with the test fold data. Default is False.
     -------
     None
     
@@ -61,6 +64,24 @@ def PARM_predict(input : str,
         elif model_name != os.path.basename(model_weight).split("_fold")[0]:
             raise ValueError(f"Model prefixes do not match: {model_name} and {os.path.basename(model_weight).split('_fold')[0]}. Please make sure that folds of the same model have the same prefix")
         complete_models["prediction_" + model_name] = load_PARM(model_weight, filter_size = filter_size, train=False,type_loss=type_loss)
+    if test_fold:
+        # If test_fold is True, we assume that the input is a hdf5 file with the test fold data
+        # perform the test set prediction and create measured vs predicted plot
+        log("Performing test fold predictions")
+        # Use the input path as the test fold HDF5 file path
+        test_fold_path = input
+        
+        # Create output directory for test results if it doesn't exist
+        test_output_dir = output
+        
+        get_test_fold_predictions(
+            test_fold_path=test_fold_path, 
+            list_of_models=list(complete_models.values()), 
+            cell_type=model_name,
+            output_directory=test_output_dir
+        )
+        return
+    # Default behaviour: input is a fasta file with sequences to predict
     # Iterate over sequences and predict scores
     log("Making predictions")
     total_sequences = sum(1 for _ in SeqIO.parse(input, "fasta"))
@@ -103,6 +124,155 @@ def PARM_predict(input : str,
     pbar.close()
     log("Finish output file")
 
+def get_test_fold_predictions(test_fold_path, list_of_models, cell_type, output_directory):
+    """
+    Perform predictions on test fold data and create measured vs predicted plot.
+    
+    Parameters
+    ----------
+    test_fold_path : str
+        Path to the HDF5 file containing test fold data.
+    list_of_models : dict
+        Dictionary of loaded PARM models.
+    cell_type : str
+        Cell type for the data.
+    output_directory : str
+        Directory to save the plot.
+    
+    Returns
+    -------
+    None
+    """
+    import matplotlib.pyplot as plt
+    from matplotlib import colors
+    from scipy.stats import pearsonr
+    import h5py
+    from .PARM_utils_data_loader import h5_dataset, shuffle_batch_sampler, pad_collate
+    
+    log(f"Loading test fold data from {test_fold_path}")
+    
+    # Create dataset for test fold
+    test_dataset = h5_dataset(path=[test_fold_path], celltype=cell_type)
+    
+    # Create indices for all samples in test dataset
+    index_dataset_test = np.arange(len(test_dataset))
+    index_dataset_test = np.array([index_dataset_test, np.zeros(len(index_dataset_test), dtype=int)]).T
+    
+    # Create data loader for test set
+    batch_size = 32  # Use reasonable batch size for prediction
+    params = {
+        'batch_size': None,  # Will be handled by sampler
+        'shuffle': False,
+        'num_workers': 1,
+        'collate_fn': pad_collate(L_max=600, alternative_padding=False)
+    }
+    
+    sampler = shuffle_batch_sampler(
+        index_dataset_test, batch_size=batch_size, drop_last=False
+    )
+    
+    test_generator = torch.utils.data.DataLoader(
+        test_dataset, sampler=sampler, **params
+    )
+    
+    log(f"Making predictions on {len(test_dataset)} test samples")
+    
+    # Collect predictions from all models
+    all_predictions = []
+    y_test_true = np.empty((0, 1))
+    
+    for model_name, model in list_of_models.items():
+        log(f"Predicting with model: {model_name}")
+        model.eval()
+        
+        y_test_predicted = np.empty((0, 1))
+        y_test_real = np.empty((0, 1))
+        
+        with torch.no_grad():
+            for batch_ndx, (X, y) in enumerate(test_generator):
+                X = X.permute(0, 2, 1)
+                y = torch.flatten(y, 1, 2)
+                
+                if torch.cuda.is_available():
+                    X = X.cuda()
+                    y = y.cuda()
+                
+                pred = model(X)
+                
+                y_test_predicted = np.append(
+                    y_test_predicted, pred.cpu().detach().numpy(), axis=0
+                )
+                y_test_real = np.append(y_test_real, y.cpu().detach().numpy(), axis=0)
+        
+        all_predictions.append(y_test_predicted)
+        if len(y_test_true) == 0:  # Only store true values once
+            y_test_true = y_test_real
+    
+    # Average predictions across all models
+    y_test_predicted_avg = np.mean(all_predictions, axis=0)
+    
+    # Calculate metrics
+    from sklearn.metrics import r2_score
+    
+    true_flat = y_test_true.flatten()
+    pred_flat = y_test_predicted_avg.flatten()
+    
+    r2 = r2_score(true_flat, pred_flat)
+    pearson_r, _ = pearsonr(true_flat, pred_flat)
+    mse = np.mean((true_flat - pred_flat) ** 2)
+    
+    log(f"Test fold results:")
+    log(f"\t R2 coefficient: {r2:.4f}")
+    log(f"\t Pearson correlation: {pearson_r:.4f}")
+    log(f"\t Mean squared error: {mse:.4f}")
+    
+    # Create measured vs predicted plot
+    fig, ax = plt.subplots(figsize=(8, 8))
+    
+    # Create 2D histogram
+    h = ax.hist2d(
+        pred_flat,
+        true_flat,
+        bins=100,
+        norm=colors.LogNorm(),
+        cmap="viridis"
+    )
+    
+    # Add correlation coefficient annotation
+    ax.annotate(f'R = {pearson_r:.3f}\nR² = {r2:.3f}', 
+                xy=(0.05, 0.95), xycoords='axes fraction',
+                fontsize=12, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    
+    # Add diagonal line for perfect prediction
+    min_val = min(pred_flat.min(), true_flat.min())
+    max_val = max(pred_flat.max(), true_flat.max())
+    ax.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8, linewidth=2)
+    
+    ax.set_xlabel("Predicted Log2RPM", fontsize=12)
+    ax.set_ylabel("Measured Log2RPM", fontsize=12)
+    ax.set_title(f"Test Fold Results - {cell_type} cell type", fontsize=14)
+    
+    # Add colorbar
+    plt.colorbar(h[3], ax=ax, label='Count')
+    
+    # Save plot
+    plot_path = os.path.join(output_directory, f"test_fold_scatter_{cell_type}.png")
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    log(f"Test fold plot saved to: {plot_path}")
+    
+    # Save predictions to file
+    results_df = pd.DataFrame({
+        'measured': true_flat,
+        'predicted': pred_flat
+    })
+    results_path = os.path.join(output_directory, f"test_fold_predictions_{cell_type}.tsv")
+    results_df.to_csv(results_path, sep='\t', index=False)
+    
+    log(f"Test fold predictions saved to: {results_path}")
+    
 
 def get_prediction(sequence, complete_model):
     """

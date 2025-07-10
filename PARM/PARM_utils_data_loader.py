@@ -187,7 +187,7 @@ class h5_dataset(torch.utils.data.Dataset):
         self.file_path = path
         self.dataset = None
         self.celltype = celltype
-        self.Zscore_logTPM = 'LnNorm'
+        self.Zscore_logTPM = 'Log2RPM'
         
         # Check if multiple cell types
         self.multiple_cells = self.celltype.split("__")

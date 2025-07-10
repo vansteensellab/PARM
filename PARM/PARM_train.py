@@ -3,6 +3,7 @@ import sys
 import os
 import pandas as pd
 from matplotlib import pyplot as plt
+from matplotlib import colors
 import optuna
 from sklearn.metrics import r2_score
 from scipy.stats import pearsonr
@@ -297,7 +298,10 @@ def objective(
                 model=model, 
                 criterion=criterion, 
                 betas=betas,
-                total_iterations=total_iterations_val
+                total_iterations=total_iterations_val,
+                output_directory=output_directory,
+                this_epoch=epoch,
+                cell_type=cell_type,
             )
             results.append([epoch, training_loss, val_loss])
 
@@ -384,7 +388,7 @@ def train_loop(
     loss_value = 9.9999
     training_loss = 0.0
     y_train_predicted, y_train_true = np.empty((0, 1)), np.empty((0, 1))
-    pbar = tqdm(enumerate(train_dataloader), ncols=150, total=total_iterations, file=sys.stdout)
+    pbar = tqdm(enumerate(train_dataloader), ncols=100, total=total_iterations, file=sys.stdout)
     for batch_ndx, (X, y) in pbar:
         pbar.set_postfix({'Epoch': this_epoch, 'Loss': f"{loss_value:.4f}", 'LR': f"{optimizer.param_groups[0]['lr']:.4f}"})
 
@@ -445,7 +449,16 @@ def train_loop(
     return (y_train_predicted, y_train_true, training_loss)
 
 
-def validation_loop(valid_dataloader, model, criterion, betas, total_iterations):
+def validation_loop(
+    valid_dataloader, 
+    model, 
+    criterion, 
+    betas, 
+    total_iterations, 
+    output_directory, 
+    this_epoch,
+    cell_type,
+    ):
     """
     Validation loop.
     Args:
@@ -504,5 +517,28 @@ def validation_loop(valid_dataloader, model, criterion, betas, total_iterations)
 
     val_loss /= batch_ndx
 
+    # Plot the predicted vs. measurements for this validation epoch
+    fig, ax = plt.subplots(figsize=(6, 6))
+    ax.hist2d(
+        y_val_predicted.flatten(),
+        y_val_real.flatten(),
+        bins=(100,100),
+        norm=colors.LogNorm()
+        cmap="viridis",
+    )
+    corrfunc(y_val_predicted.flatten(), y_val_real.flatten(), ax=ax)
+    ax.set_xlabel("Predicted Log2RPM")
+    ax.set_ylabel("Measured Log2RPM")
+    ax.set_title(f"Validation epoch {this_epoch} - {cell_type} cell type")
+    plt.savefig(os.path.join(output_directory, f"validation_scatter_{this_epoch}.png"))
+    
     return (y_val_predicted, y_val_real, val_loss)
 
+def corrfunc(x, y, ax=None, **kws):
+    """
+    Plot the correlation coefficient in the top left hand corner of a plot.
+    (for the correlation plot)
+    """
+    r, _ = pearsonr(x, y)
+    ax = ax or plt.gca()
+    ax.annotate(f'R = {r:.2f}', xy=(.1, .9), xycoords=ax.transAxes)

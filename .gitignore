@@ -13,3 +13,4 @@ slurm_out/
 pre_trained_models/SuRE-prom-enh.parm
 example_data_output*
 test_fold*
+output_fold*

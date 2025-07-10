@@ -514,7 +514,7 @@ def validation_loop(
     val_loss /= batch_ndx
 
     # Plot the predicted vs. measurements for this validation epoch
-    fig, ax = plt.subplots(figsize=(6, 6))
+    fig, ax = plt.subplots(figsize=(5, 5))
     ax.hist2d(
         y_val_predicted.flatten(),
         y_val_real.flatten(),
@@ -526,7 +526,7 @@ def validation_loop(
     ax.set_xlabel("Predicted Log2RPM")
     ax.set_ylabel("Measured Log2RPM")
     ax.set_title(f"Validation epoch {this_epoch} - {cell_type} cell type")
-    plt.savefig(os.path.join(output_directory, f"validation_scatter_{this_epoch}.png"))
+    plt.savefig(os.path.join(output_directory, f"validation_scatter_{this_epoch}.svg"))
     
     return (y_val_predicted, y_val_real, val_loss)
 

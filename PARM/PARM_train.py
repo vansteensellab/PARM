@@ -52,11 +52,15 @@ def PARM_train(args):
         os.makedirs(
             output_directory
         )  # Create folder where all the output is going to be saved
-
+    # Create subfolders for the output
+    if not os.path.exists(os.path.join(output_directory, 'temp_models')):
+        os.makedirs(os.path.join(output_directory, 'temp_models'))
+    if not os.path.exists(os.path.join(output_directory, 'performance_stats')):
+        os.makedirs(os.path.join(output_directory, 'performance_stats'))
     # All loging functions will be saved in a file
     #f = open(os.path.join(output_directory, "log.txt"), "w")
     
-    log(f"Cuda working? {torch.cuda.is_available()}")
+    log(f"GPU detected? {torch.cuda.is_available()}")
 
     # Check if validation data is in training data
     error = any(
@@ -303,7 +307,7 @@ def objective(
 
         torch.save(
             model.state_dict(),
-            os.path.join(output_directory, f"model_epoch_{epoch}.pth"),
+            os.path.join(output_directory, 'temp_models', f"model_epoch_{epoch}.pth"),
         )
 
         true_sub = y_val_true[:, 0].flatten()
@@ -318,24 +322,19 @@ def objective(
         log(f"\t Mean sq. error: {round(MSE,4)}")
         log(f"\t Pearson's correlation: {round(PCC,4)}")
 
-        if (epoch) % 5 == 0 or epoch == (n_epochs - 1):
-            torch.save(
-                model.state_dict(),
-                os.path.join(output_directory, f"tmp_model_epoch_{epoch}.parm"),
-            )
-
     # TRAINING is complete.
 
     ##We've finished all epochs
     log(f"Finished training!")
-    log(f"Model saved in: {os.path.join(output_directory, 'model.parm')}")
-    torch.save(model.state_dict(), os.path.join(output_directory, f"model.parm"))
+    output_basename = os.path.basename(output_directory)
+    log(f"Model saved in: {os.path.join(output_directory, f'{output_basename}.parm')}")
+    torch.save(model.state_dict(), os.path.join(output_directory, f"{output_basename}.parm"))
 
     log(f"Saving dataframe and plots with results in {output_directory}")
     column_names = ["epoch", "training_loss", "validation_loss"]
     results = pd.DataFrame(results, columns=column_names)
     results.to_csv(
-        os.path.join(output_directory, f"results_model_PARM.txt"), index=False, sep="\t"
+        os.path.join(output_directory, 'performance_stats', f"loss_per_epoch.txt"), index=False, sep="\t"
     )
 
     plt.plot(results["epoch"], results["training_loss"], label="Training loss")
@@ -343,7 +342,7 @@ def objective(
     plt.xlabel("Epochs")
     plt.ylabel("Loss: Mean Squared Error (MSE)")
     plt.legend()
-    plt.savefig(os.path.join(output_directory, f"loss_per_epoch.png"))
+    plt.savefig(os.path.join(output_directory, 'performance_stats', f"loss_per_epoch.png"))
     plt.clf()
 
     return val_loss
@@ -526,7 +525,7 @@ def validation_loop(
     ax.set_xlabel("Predicted Log2RPM")
     ax.set_ylabel("Measured Log2RPM")
     ax.set_title(f"Validation epoch {this_epoch} - {cell_type} cell type")
-    plt.savefig(os.path.join(output_directory, f"validation_scatter_{this_epoch}.svg"))
+    plt.savefig(os.path.join(output_directory, 'performance_stats', f"validation_scatter_{this_epoch}.svg"))
     
     return (y_val_predicted, y_val_real, val_loss)
 

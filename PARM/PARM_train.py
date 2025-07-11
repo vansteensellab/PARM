@@ -3,6 +3,7 @@ import sys
 import os
 import pandas as pd
 from matplotlib import pyplot as plt
+from matplotlib import colors
 import optuna
 from sklearn.metrics import r2_score
 from scipy.stats import pearsonr
@@ -42,7 +43,6 @@ def PARM_train(args):
         sys.exit(
             f"Error: Wrong values of betas. You must provide two values, you provided {len(betas)}"
         )
-
     #############
     # 3. Create output directory
 
@@ -50,15 +50,15 @@ def PARM_train(args):
         os.makedirs(
             output_directory
         )  # Create folder where all the output is going to be saved
-
+    # Create subfolders for the output
+    if not os.path.exists(os.path.join(output_directory, 'temp_models')):
+        os.makedirs(os.path.join(output_directory, 'temp_models'))
+    if not os.path.exists(os.path.join(output_directory, 'performance_stats')):
+        os.makedirs(os.path.join(output_directory, 'performance_stats'))
     # All loging functions will be saved in a file
-    # f = open(os.path.join(output_directory, "log.txt"), "w")
-
-    log(f"Cuda working? {torch.cuda.is_available()}")
-
-    log(f"Output directory: {output_directory}")
-
-    log(f"Input Directory {input_directory}")
+    #f = open(os.path.join(output_directory, "log.txt"), "w")
+    
+    log(f"GPU detected? {torch.cuda.is_available()}")
 
     # Check if validation data is in training data
     error = any(
@@ -297,12 +297,15 @@ def objective(
                 criterion=criterion,
                 betas=betas,
                 total_iterations=total_iterations_val,
+                output_directory=output_directory,
+                this_epoch=epoch,
+                cell_type=cell_type,
             )
             results.append([epoch, training_loss, val_loss])
 
         torch.save(
             model.state_dict(),
-            os.path.join(output_directory, f"model_epoch_{epoch}.pth"),
+            os.path.join(output_directory, 'temp_models', f"model_epoch_{epoch}.pth"),
         )
 
         true_sub = y_val_true[:, 0].flatten()
@@ -317,25 +320,19 @@ def objective(
         log(f"\t Mean sq. error: {round(MSE,4)}")
         log(f"\t Pearson's correlation: {round(PCC,4)}")
 
-        if (epoch) % 5 == 0 or epoch == (n_epochs - 1):
-            torch.save(
-                model.state_dict(),
-                os.path.join(output_directory, f"tmp_model_epoch_{epoch}.parm"),
-            )
-
     # TRAINING is complete.
 
     ##We've finished all epochs
     log(f"Finished training!")
-
-    log(f"Model saved in: {os.path.join(output_directory, f'{cell_type}.parm')}")
-    torch.save(model.state_dict(), os.path.join(output_directory, f"{cell_type}.parm"))
+    output_basename = os.path.basename(output_directory)
+    log(f"Model saved in: {os.path.join(output_directory, f'{output_basename}.parm')}")
+    torch.save(model.state_dict(), os.path.join(output_directory, f"{output_basename}.parm"))
 
     log(f"Saving dataframe and plots with results in {output_directory}")
     column_names = ["epoch", "training_loss", "validation_loss"]
     results = pd.DataFrame(results, columns=column_names)
     results.to_csv(
-        os.path.join(output_directory, f"results_model_PARM.txt"), index=False, sep="\t"
+        os.path.join(output_directory, 'performance_stats', f"loss_per_epoch.txt"), index=False, sep="\t"
     )
 
     plt.plot(results["epoch"], results["training_loss"], label="Training loss")
@@ -343,7 +340,7 @@ def objective(
     plt.xlabel("Epochs")
     plt.ylabel("Loss: Mean Squared Error (MSE)")
     plt.legend()
-    plt.savefig(os.path.join(output_directory, f"loss_per_epoch.png"))
+    plt.savefig(os.path.join(output_directory, 'performance_stats', f"loss_per_epoch.png"))
     plt.clf()
 
     return val_loss
@@ -384,9 +381,7 @@ def train_loop(
     loss_value = 9.9999
     training_loss = 0.0
     y_train_predicted, y_train_true = np.empty((0, 1)), np.empty((0, 1))
-    pbar = tqdm(
-        enumerate(train_dataloader), total=total_iterations,
-    )
+    pbar = tqdm(enumerate(train_dataloader), ncols=100, total=total_iterations, file=sys.stdout)
     for batch_ndx, (X, y) in pbar:
         pbar.set_postfix(
             {
@@ -455,7 +450,16 @@ def train_loop(
     return (y_train_predicted, y_train_true, training_loss)
 
 
-def validation_loop(valid_dataloader, model, criterion, betas, total_iterations):
+def validation_loop(
+    valid_dataloader, 
+    model, 
+    criterion, 
+    betas, 
+    total_iterations, 
+    output_directory, 
+    this_epoch,
+    cell_type,
+    ):
     """
     Validation loop.
     Args:
@@ -517,4 +521,28 @@ def validation_loop(valid_dataloader, model, criterion, betas, total_iterations)
 
     val_loss /= batch_ndx
 
+    # Plot the predicted vs. measurements for this validation epoch
+    fig, ax = plt.subplots(figsize=(5, 5))
+    ax.hist2d(
+        y_val_predicted.flatten(),
+        y_val_real.flatten(),
+        bins=(100,100),
+        norm=colors.LogNorm(),
+        cmap="viridis",
+    )
+    corrfunc(y_val_predicted.flatten(), y_val_real.flatten(), ax=ax)
+    ax.set_xlabel("Predicted Log2RPM")
+    ax.set_ylabel("Measured Log2RPM")
+    ax.set_title(f"Validation epoch {this_epoch} - {cell_type} cell type")
+    plt.savefig(os.path.join(output_directory, 'performance_stats', f"validation_scatter_{this_epoch}.svg"))
+    
     return (y_val_predicted, y_val_real, val_loss)
+
+def corrfunc(x, y, ax=None, **kws):
+    """
+    Plot the correlation coefficient in the top left hand corner of a plot.
+    (for the correlation plot)
+    """
+    r, _ = pearsonr(x, y)
+    ax = ax or plt.gca()
+    ax.annotate(f'R = {r:.2f}', xy=(.1, .9), xycoords=ax.transAxes)

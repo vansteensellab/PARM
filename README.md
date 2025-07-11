@@ -1,13 +1,17 @@
-# Table of contents
+## Table of contents
 
-- [**Introduction**](#introduction)
-- [**Installation**](#installation)
-- [**Quick usage examples**](#quick-usage-examples)
-  * [Predicting promoter activity](#predicting-promoter-activity)
-  * [Running _in-silico_ mutagenesis](#running-in-silico-mutagenesis)
-  * [Plotting results of _in-silico_ mutagenesis](#plotting-results-of-in-silico-mutagenesis)
+- [Table of contents](#table-of-contents)
+- [Introduction](#introduction)
+- [Installation](#installation)
+- [Usage examples](#usage-examples)
+  - [Predicting promoter activity](#predicting-promoter-activity)
+- [Running _in-silico_ mutagenesis](#running-in-silico-mutagenesis)
+- [Plotting results of _in-silico_ mutagenesis](#plotting-results-of-in-silico-mutagenesis)
+  - [Training your own PARM model](#training-your-own-parm-model)
+  - [Making predictions with your own model](#making-predictions-with-your-own-model)
+    - [Considerations for training your model](#considerations-for-training-your-model)
 
-# Introduction
+## Introduction
 
 PARM (Promoter Activity Regulatory Model) is a deep learning model that predicts the promoter activity from the DNA sequence itself.
 As a convolution neural network trained on MPRA data, **PARM** is very lightweight and produces predictions in a cell-type-specific manner.
@@ -17,7 +21,7 @@ With the `PARM predict` tool, you can get predictions for any sequence that you 
 With `PARM mutagenesis`, in addition to simple promoter activity scores, **PARM** can also produce the so-called _in-silico_ mutagenesis plot.
 This is useful for predicting which TFs are regulating (activating or repressing) your sequence. (read more on [Running _in-silico_ mutagenesis](#running-in-silico-mutagenesis)).
 
-# Installation
+## Installation
 
 **PARM** can be easily installed with `conda`:
 
@@ -25,9 +29,9 @@ This is useful for predicting which TFs are regulating (activating or repressing
 conda install -c anaconda -c conda-forge -c bioconda -c pytorch parm
 ```
 
-# Usage examples
+## Usage examples
 
-## Predicting promoter activity
+### Predicting promoter activity
 
 To predict the promoter activity in K562 of every sequence in a fasta file, run:
 
@@ -94,3 +98,104 @@ This can be changed using optional arguments.
 
 Run `parm plot --help` for additional help on that.
 
+### Training your own PARM model
+
+If you want to train a PARM model with your MPRA data, you must pre-process the raw MPRA counts using our [pre-processing pipeline](https://github.com/vansteensellab/PARM_preprocessing_pipeline).
+This will produce, mainly, one-hot encoded files with the promoter activity per fragment, per cell. 
+In the `example_data/training_data` directory, we provide an example of this for the AGS and HAP1 cells.
+
+We always train PARM models five independent times, using different folds (splits of the data) for validation.  
+To train the PARM models for the AGS cell, you can run:
+
+```sh
+# Fold 0 model
+parm train \
+  --input example_data/training_data/onehot/fold[1234].* \
+  --validation example_data/training_data/onehot/fold0.hdf5 \
+  --output AGS_fold0 \
+  --cell_type AGS
+```
+
+This will create the `AGS_fold0` folder, with the following structure:
+
+```
+AGS_fold0/
+├── AGS_fold0.parm
+├── performance_stats/
+|   ├── loss_per_epoch.png
+|   ├── loss_per_epoch.txt
+│   ├── validation_scatter_0.svg
+│   ├── validation_scatter_1.svg
+│   |-- ...one per epoch
+│   └── validation_scatter_6.svg
+└── temp_models/ 
+    ├── model_epoch_0.pth
+    ├── model_epoch_1.pth
+    |-- ...one per epoch
+    └── model_epoch_6.pth
+```
+
+In this case, `AGS_fold0.parm` is the main result.
+In the `performance_stats` dir, you will find the training and validation loss of each training epoch ( `loss_per_epoch.*` files), as well as the scatter plot of the measured vs. predicted Log2RPM values for each epoch (`validation_scatter_*.svg` files).
+In the `temp_models` dir, you can find the intermediate models for each training epoch (`temp_models` dir).
+
+Similarly, for the other folds, you can run:
+
+```sh
+# Fold 1 model
+parm train \
+  --input example_data/training_data/onehot/fold[0234].* \
+  --validation example_data/training_data/onehot/fold1.hdf5 \
+  --output AGS_fold1 \
+  --cell_type AGS
+
+# Fold 2 model
+parm train \
+  --input example_data/training_data/onehot/fold[0134].* \
+  --validation example_data/training_data/onehot/fold2.hdf5 \
+  --output AGS_fold2 \
+  --cell_type AGS
+
+# Fold 3 model
+parm train \
+  --input example_data/training_data/onehot/fold[0124].* \
+  --validation example_data/training_data/onehot/fold3.hdf5 \
+  --output AGS_fold3 \
+  --cell_type AGS
+
+# Fold 4 model
+parm train \
+  --input example_data/training_data/onehot/fold[0123].* \
+  --validation example_data/training_data/onehot/fold4.hdf5 \
+  --output AGS_fold4 \
+  --cell_type AGS
+```
+
+### Making predictions with your own model
+
+After training all the folds, you should place all the folds in a single directory:
+
+```sh
+mkdir my_AGS_model
+cp AGS_fold0/AGS_fold0.parm \
+   AGS_fold1/AGS_fold1.parm \
+   AGS_fold2/AGS_fold2.parm \
+   AGS_fold3/AGS_fold3.parm \
+   AGS_fold4/AGS_fold4.parm \
+   my_AGS_model/
+```
+
+and then, run:
+
+```sh
+parm predict \
+  --input example_data/input.fasta \
+  --output output_my_AGS.txt \
+  --model my_AGS_model/
+```
+
+#### Considerations for training your model
+
+- The provided data in the `example_data/training_data` is not enough to train a good PARM model. We only provide it here for the sake of this tutorial.
+- Always run the `PARM train` function from a GPU server. A normal CPU machine will take a long time to train a model, even the provided example data. In the start of the training, PARM will print in the screen if a GPU is detected. Make sure that you see `GPU detected? True`.
+- Even if your input data contains measurements for more than one cell (as the provided example, that contains data for AGS and HAP1), you can only train a model for one cell at a time.

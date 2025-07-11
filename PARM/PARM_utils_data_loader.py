@@ -183,11 +183,11 @@ class h5_dataset(torch.utils.data.Dataset):
         same as desired Tensor type.
     """
 
-    def __init__(self, path, celltype, measurement_column="Log2RPM_K562"):
+    def __init__(self, path, celltype):
         self.file_path = path
         self.dataset = None
         self.celltype = celltype
-        self.measurement_column = measurement_column
+        self.Zscore_logTPM = 'Log2RPM'
         
         # Check if multiple cell types
         self.multiple_cells = self.celltype.split("__")

@@ -8,8 +8,8 @@
 - [Running _in-silico_ mutagenesis](#running-in-silico-mutagenesis)
 - [Plotting results of _in-silico_ mutagenesis](#plotting-results-of-in-silico-mutagenesis)
   - [Training your own PARM model](#training-your-own-parm-model)
-  - [Making predictions with your own model](#making-predictions-with-your-own-model)
-    - [Considerations for training your model](#considerations-for-training-your-model)
+  - [Evaluating your model with the test fold](#evaluating-your-model-with-the-test-fold)
+  - [Considerations for training your model](#considerations-for-training-your-model)
 
 ## Introduction
 

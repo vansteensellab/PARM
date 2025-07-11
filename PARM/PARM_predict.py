@@ -1,26 +1,28 @@
-
 import torch
 import numpy as np
 from Bio import SeqIO
 import pandas as pd
 import os
 from .PARM_utils_load_model import load_PARM
-from .PARM_misc import log
+from .PARM_misc import log, check_sequence_length
 from tqdm import tqdm
 
 
-def PARM_predict(input : str,
-                 output : str, 
-                 model_directory : str,
-                 n_seqs_per_batch : int = 1,
-                 store_sequence : bool = True,
-                 filter_size : int = 125,
-                 type_loss: str = 'poisson',
-                 test_fold: bool = False):
+def PARM_predict(
+    input: str,
+    output: str,
+    model_directory: str,
+    n_seqs_per_batch: int = 1,
+    store_sequence: bool = True,
+    filter_size: int = 125,
+    type_loss: str = "poisson",
+    test_fold: bool = False,
+    L_max: int = 600,
+):
     """
     Reads the input (fasta file) and predicts promoter activity scores using the PARM models.
     Writes the output as tab-separated values, where each column is a model and each row is a sequence.
-    
+
     Parameters
     ----------
     input : str
@@ -41,245 +43,284 @@ def PARM_predict(input : str,
         If True, the function will consider that the input is a hdf5 file with the test fold data. Default is False.
     -------
     None
-    
+
     Examples
     --------
     >>> PARM_predict("input.fasta", "output.tsv", ["model1.parm", "model2.parm"])
     """
     # Load models
     log("Loading models")
-    complete_models = dict()
+    list_of_models = list()
     # Iterate over the model_directory and get the folds
-    model_weights = []
+    path_to_all_folds = []
     for file in os.listdir(model_directory):
         if file.endswith(".parm"):
-            model_weights.append(os.path.join(model_directory, file))
-    if len(model_weights) == 0:
-        raise ValueError(f"No model files (.parm) found in {model_directory}. Please check the path and ensure it contains the model files.")
+            path_to_all_folds.append(os.path.join(model_directory, file))
+    if len(path_to_all_folds) == 0:
+        raise ValueError(
+            f"No model files (.parm) found in {model_directory}. Please check the path and ensure it contains the model files."
+        )
     # Now, load the models
+    log(f"Found {len(path_to_all_folds)} model files in {model_directory}")
     model_name = ""
-    for model_weight in model_weights:
+    for fold_path in path_to_all_folds:
         if model_name == "":
-            model_name = os.path.basename(model_weight).split("_fold")[0]
-        elif model_name != os.path.basename(model_weight).split("_fold")[0]:
-            raise ValueError(f"Model prefixes do not match: {model_name} and {os.path.basename(model_weight).split('_fold')[0]}. Please make sure that folds of the same model have the same prefix")
-        complete_models["prediction_" + model_name] = load_PARM(model_weight, filter_size = filter_size, train=False,type_loss=type_loss)
+            model_name = os.path.basename(fold_path).split("_fold")[0]
+        elif model_name != os.path.basename(fold_path).split("_fold")[0]:
+            raise ValueError(
+                f"Model prefixes do not match: {model_name} and {os.path.basename(fold_path).split('_fold')[0]}. Please make sure that folds of the same model have the same prefix"
+            )
+        list_of_models.append(
+            load_PARM(
+                fold_path, filter_size=filter_size, train=False, type_loss=type_loss
+            )
+        )
     if test_fold:
         # If test_fold is True, we assume that the input is a hdf5 file with the test fold data
         # perform the test set prediction and create measured vs predicted plot
         log("Performing test fold predictions")
         # Use the input path as the test fold HDF5 file path
         test_fold_path = input
-        
+
         # Create output directory for test results if it doesn't exist
         test_output_dir = output
-        
+
         get_test_fold_predictions(
-            test_fold_path=test_fold_path, 
-            list_of_models=list(complete_models.values()), 
+            test_fold_path=test_fold_path,
+            list_of_models=list_of_models,
             cell_type=model_name,
-            output_directory=test_output_dir
+            output_directory=test_output_dir,
         )
         return
     # Default behaviour: input is a fasta file with sequences to predict
     # Iterate over sequences and predict scores
+    # Check input fasta
+    check_sequence_length(input, L_max)
     log("Making predictions")
     total_sequences = sum(1 for _ in SeqIO.parse(input, "fasta"))
     log(f"Total sequences: {total_sequences}")
-    total_interactions = total_sequences * len(
-        complete_models
-    )
-    pbar = tqdm(total=int(total_interactions/n_seqs_per_batch), ncols=80)
+    total_interactions = total_sequences * len(list_of_models)
+    pbar = tqdm(total=int(total_interactions / n_seqs_per_batch), ncols=80)
 
     i = 0
     for i_record, record in enumerate(SeqIO.parse(input, "fasta")):
         # Initiate output df
         sequence = str(record.seq).upper()
-        if i ==0: tmp = pd.DataFrame({"sequence": [sequence], "header": [record.id]})
-        else: tmp = pd.concat([tmp, pd.DataFrame({"sequence": [sequence], "header": [record.id]})])
-        
+        if i == 0:
+            tmp = pd.DataFrame({"sequence": [sequence], "header": [record.id]})
+        else:
+            tmp = pd.concat(
+                [tmp, pd.DataFrame({"sequence": [sequence], "header": [record.id]})]
+            )
+
         # Get predictions for all models
-        if (i+1) == n_seqs_per_batch or (i_record == (total_sequences-1)):
+        if (i + 1) == n_seqs_per_batch or (i_record == (total_sequences - 1)):
             predictions_all_folds = []
-            for _, model in complete_models.items():
-                predictions_all_folds.append(get_prediction(tmp.sequence.to_list(), model))
+            for model in list_of_models:
+                predictions_all_folds.append(
+                    get_prediction(tmp.sequence.to_list(), model)
+                )
                 pbar.update(1)
-            # Now, take the average of the predictions and add to the tmp[model_name] 
+            # Now, take the average of the predictions and add to the tmp[model_name]
             tmp["prediction_" + model_name] = np.mean(predictions_all_folds, axis=0)
 
             # Store in output df
-            #IF it's the first batch, save the df with headers, otherwise, save only the scores
-            if i_record < n_seqs_per_batch: 
-                if store_sequence: tmp.to_csv(output, sep="\t", index=False)
-                else: (tmp.drop(columns=["sequence"])).to_csv(output, sep="\t", index=False)
+            # IF it's the first batch, save the df with headers, otherwise, save only the scores
+            if i_record < n_seqs_per_batch:
+                if store_sequence:
+                    tmp.to_csv(output, sep="\t", index=False)
+                else:
+                    (tmp.drop(columns=["sequence"])).to_csv(
+                        output, sep="\t", index=False
+                    )
             else:
-                if store_sequence: tmp.to_csv(output, sep="\t", index=False, mode='a', header=False)
-                else: (tmp.drop(columns=["sequence"])).to_csv(output, sep="\t", index=False, mode='a', header=False)
+                if store_sequence:
+                    tmp.to_csv(output, sep="\t", index=False, mode="a", header=False)
+                else:
+                    (tmp.drop(columns=["sequence"])).to_csv(
+                        output, sep="\t", index=False, mode="a", header=False
+                    )
 
             i = 0
-            
-            
-        else: i += 1
+
+        else:
+            i += 1
     # Write output
     pbar.close()
     log("Finish output file")
 
-def get_test_fold_predictions(test_fold_path, list_of_models, cell_type, output_directory):
+
+def get_test_fold_predictions(
+    test_fold_path, list_of_models, cell_type, output_directory
+):
     """
     Perform predictions on test fold data and create measured vs predicted plot.
-    
-    Parameters
-    ----------
-    test_fold_path : str
-        Path to the HDF5 file containing test fold data.
-    list_of_models : dict
-        Dictionary of loaded PARM models.
-    cell_type : str
-        Cell type for the data.
-    output_directory : str
-        Directory to save the plot.
-    
-    Returns
-    -------
-    None
     """
     import matplotlib.pyplot as plt
     from matplotlib import colors
     from scipy.stats import pearsonr
     import h5py
-    from .PARM_utils_data_loader import h5_dataset, shuffle_batch_sampler, pad_collate
-    
+
+    # make output directory if it doesn't exist
+    if not os.path.exists(output_directory):
+        os.makedirs(output_directory)
+
     log(f"Loading test fold data from {test_fold_path}")
-    
-    # Create dataset for test fold
-    test_dataset = h5_dataset(path=[test_fold_path], celltype=cell_type)
-    
-    # Create indices for all samples in test dataset
-    index_dataset_test = np.arange(len(test_dataset))
-    index_dataset_test = np.array([index_dataset_test, np.zeros(len(index_dataset_test), dtype=int)]).T
-    
-    # Create data loader for test set
-    batch_size = 32  # Use reasonable batch size for prediction
-    params = {
-        'batch_size': None,  # Will be handled by sampler
-        'shuffle': False,
-        'num_workers': 1,
-        'collate_fn': pad_collate(L_max=600, alternative_padding=False)
-    }
-    
-    sampler = shuffle_batch_sampler(
-        index_dataset_test, batch_size=batch_size, drop_last=False
-    )
-    
-    test_generator = torch.utils.data.DataLoader(
-        test_dataset, sampler=sampler, **params
-    )
-    
-    log(f"Making predictions on {len(test_dataset)} test samples")
-    
-    # Collect predictions from all models
+
+    # Load HDF5 file directly
+    with h5py.File(test_fold_path, "r") as f:
+        # Load sequences (one-hot encoded)
+        sequences = f["X"]["sequence"]["OneHotEncoding"][:]
+        # Load measured values
+        measured = f["Y"][f"Log2RPM_{cell_type}"][:]
+        # Load the feature names of each fragment
+        # temporary: create a vector that pastes the FEATstart and FEATend fields
+        feature_names = np.char.add(
+            np.char.add(f["FEAT"]["FEATstart"][:].astype(str), "_"),
+            np.char.add(f["FEAT"]["FEATstart"][:].astype(str), "_"),
+        )
+        feature_names = np.char.add(feature_names, f["FEAT"]["FEATend"][:].astype(str))
+        # feature_names = f['FEAT']
+
+    log(f"Loaded {len(sequences)} test fragments")
+
+    # Make predictions with each model
     all_predictions = []
-    y_test_true = np.empty((0, 1))
-    
-    for model_name, model in list_of_models.items():
-        log(f"Predicting with model: {model_name}")
+    batch_size = 32
+    for i, model in enumerate(list_of_models):
+        log(f"Making predictions with model fold {i}")
         model.eval()
-        
-        y_test_predicted = np.empty((0, 1))
-        y_test_real = np.empty((0, 1))
-        
+        predictions = []
+
         with torch.no_grad():
-            for batch_ndx, (X, y) in enumerate(test_generator):
-                X = X.permute(0, 2, 1)
-                y = torch.flatten(y, 1, 2)
-                
+            for start_idx in range(0, len(sequences), batch_size):
+                end_idx = min(start_idx + batch_size, len(sequences))
+                batch_sequences = sequences[start_idx:end_idx]
+
+                # Convert to tensor and move to GPU if available
+                X = torch.tensor(batch_sequences, dtype=torch.float32).permute(0, 2, 1)
                 if torch.cuda.is_available():
                     X = X.cuda()
-                    y = y.cuda()
-                
-                pred = model(X)
-                
-                y_test_predicted = np.append(
-                    y_test_predicted, pred.cpu().detach().numpy(), axis=0
-                )
-                y_test_real = np.append(y_test_real, y.cpu().detach().numpy(), axis=0)
-        
-        all_predictions.append(y_test_predicted)
-        if len(y_test_true) == 0:  # Only store true values once
-            y_test_true = y_test_real
-    
+                    model = model.cuda()
+
+                # Make predictions
+                pred = model(X).cpu().detach().numpy()
+                predictions.append(pred)
+
+        # Concatenate all batch predictions
+        model_predictions = np.concatenate(predictions, axis=0)
+        all_predictions.append(model_predictions)
+
     # Average predictions across all models
-    y_test_predicted_avg = np.mean(all_predictions, axis=0)
-    
-    # Calculate metrics
-    from sklearn.metrics import r2_score
-    
-    true_flat = y_test_true.flatten()
-    pred_flat = y_test_predicted_avg.flatten()
-    
-    r2 = r2_score(true_flat, pred_flat)
-    pearson_r, _ = pearsonr(true_flat, pred_flat)
-    mse = np.mean((true_flat - pred_flat) ** 2)
-    
-    log(f"Test fold results:")
-    log(f"\t R2 coefficient: {r2:.4f}")
-    log(f"\t Pearson correlation: {pearson_r:.4f}")
-    log(f"\t Mean squared error: {mse:.4f}")
-    
-    # Create measured vs predicted plot
-    fig, ax = plt.subplots(figsize=(8, 8))
-    
-    # Create 2D histogram
-    h = ax.hist2d(
-        pred_flat,
-        true_flat,
-        bins=100,
-        norm=colors.LogNorm(),
-        cmap="viridis"
+    avg_predictions = np.mean(all_predictions, axis=0).flatten()
+    measured_flat = measured.flatten()
+
+    # Now, make a dataframe with the predictions and measured values, and the feature names
+    results_df = pd.DataFrame(
+        {
+            "measured_Log2PM": measured_flat,
+            "predicted_Log2RPM": avg_predictions,
+            "feature": feature_names,
+        }
     )
-    
-    # Add correlation coefficient annotation
-    ax.annotate(f'R = {pearson_r:.3f}\nR² = {r2:.3f}', 
-                xy=(0.05, 0.95), xycoords='axes fraction',
-                fontsize=12, verticalalignment='top',
-                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-    
-    # Add diagonal line for perfect prediction
-    min_val = min(pred_flat.min(), true_flat.min())
-    max_val = max(pred_flat.max(), true_flat.max())
-    ax.plot([min_val, max_val], [min_val, max_val], 'r--', alpha=0.8, linewidth=2)
-    
+
+    # Calculate correlation
+    pearson_r, _ = pearsonr(measured_flat, avg_predictions)
+
+    log(f"Pearson correlation (fragment level): {pearson_r:.3f}")
+
+    # Create scatter plot
+    fig, ax = plt.subplots(figsize=(8, 7))
+
+    h = ax.hist2d(
+        avg_predictions, measured_flat, bins=100, norm=colors.LogNorm(), cmap="viridis"
+    )
+
+    # Add correlation annotation
+    ax.annotate(
+        f"R = {pearson_r:.3f}",
+        xy=(0.05, 0.95),
+        xycoords="axes fraction",
+        fontsize=12,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+    )
+
+    # Add diagonal line
+    min_val = min(avg_predictions.min(), measured_flat.min())
+    max_val = max(avg_predictions.max(), measured_flat.max())
+    ax.plot([min_val, max_val], [min_val, max_val], "r--", alpha=0.8, linewidth=2)
+
     ax.set_xlabel("Predicted Log2RPM", fontsize=12)
     ax.set_ylabel("Measured Log2RPM", fontsize=12)
-    ax.set_title(f"Test Fold Results - {cell_type} cell type", fontsize=14)
-    
-    # Add colorbar
-    plt.colorbar(h[3], ax=ax, label='Count')
-    
+    ax.set_title(f"Test Fold Results - {cell_type}", fontsize=14)
+
+    plt.colorbar(h[3], ax=ax, label="Fragment count")
+
     # Save plot
-    plot_path = os.path.join(output_directory, f"test_fold_scatter_{cell_type}.png")
-    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    plot_path = os.path.join(
+        output_directory, f"test_fold_scatter_{cell_type}_fragment_level.svg"
+    )
+    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
     plt.close()
+
+    results_path = os.path.join(
+        output_directory, f"test_fold_predictions_{cell_type}.tsv"
+    )
+    results_df.to_csv(results_path, sep="\t", index=False)
+
+    # Now, group prediction by feature and plot the measured vs. predicted values
+    grouped_results = (
+        results_df.groupby("feature")
+        .agg({"measured_Log2PM": "mean", "predicted_Log2RPM": "mean"})
+        .reset_index()
+    )
+
+    # plot the grouped results
+    fig, ax = plt.subplots(figsize=(8, 7))
+    h = ax.hist2d(
+        grouped_results["predicted_Log2RPM"],
+        grouped_results["measured_Log2PM"],
+        bins=100,
+        norm=colors.LogNorm(),
+        cmap="viridis",
+    )
+    # Add correlation annotation
+    pearson_r_grouped, _ = pearsonr(
+        grouped_results["measured_Log2PM"], grouped_results["predicted_Log2RPM"]
+    )
     
-    log(f"Test fold plot saved to: {plot_path}")
+    log(f"Pearson correlation (feature level): {pearson_r_grouped:.3f}")
     
-    # Save predictions to file
-    results_df = pd.DataFrame({
-        'measured': true_flat,
-        'predicted': pred_flat
-    })
-    results_path = os.path.join(output_directory, f"test_fold_predictions_{cell_type}.tsv")
-    results_df.to_csv(results_path, sep='\t', index=False)
-    
-    log(f"Test fold predictions saved to: {results_path}")
-    
+    ax.annotate(
+        f"R = {pearson_r_grouped:.3f}",
+        xy=(0.05, 0.95),
+        xycoords="axes fraction",
+        fontsize=12,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+    )
+    # Add diagonal line
+    ax.plot([min_val, max_val], [min_val, max_val], "r--", alpha=0.8, linewidth=2)
+    ax.set_xlabel("Predicted Log2RPM", fontsize=12)
+    ax.set_ylabel("Measured Log2RPM", fontsize=12)
+    ax.set_title(f"Test Fold Results - {cell_type} (Grouped by Feature)", fontsize=14)
+    plt.colorbar(h[3], ax=ax, label="Feature count")
+    # Save plot
+    plot_grouped_path = os.path.join(
+        output_directory, f"test_fold_scatter_{cell_type}_feature_level.svg"
+    )
+    plt.savefig(plot_grouped_path, dpi=300, bbox_inches="tight")
+    plt.close()
+
 
 def get_prediction(sequence, complete_model):
     """
     Predicts promoter activity score for input sequence
     """
-    #Check if sequence is a list or not and make it a list if not
-    if not isinstance(sequence, list): sequence = [sequence]
+    # Check if sequence is a list or not and make it a list if not
+    if not isinstance(sequence, list):
+        sequence = [sequence]
 
     if torch.cuda.is_available():
         complete_model = complete_model.cuda()
@@ -289,7 +330,7 @@ def get_prediction(sequence, complete_model):
     if torch.cuda.is_available():
         onehot_fragment = onehot_fragment.cuda()
     score = complete_model(onehot_fragment).cpu().detach().numpy()
-    
+
     return score
 
 

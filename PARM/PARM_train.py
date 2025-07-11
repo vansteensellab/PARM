@@ -44,7 +44,6 @@ def PARM_train(args):
         sys.exit(
             f"Error: Wrong values of betas. You must provide two values, you provided {len(betas)}"
         )
-
     #############
     # 3. Create output directory
 

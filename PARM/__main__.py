@@ -113,8 +113,6 @@ def train(args):
 
 
 def predict(args):
-    # Check input fasta
-    check_sequence_length(args.input, args.L_max)
     # Implement the logic for the predict command here
     print(description)
     print("=" * 80)
@@ -126,6 +124,9 @@ def predict(args):
     print_arguments("Number of batches", args.n_seqs_per_batch)
     print_arguments("Show only sequence's header in the output file?", args.header_only)
     print_arguments("Model filter size ", args.filter_size)
+    print_arguments("Loss function type", args.type_loss)
+    print_arguments("L_max", args.L_max)
+    print_arguments("Predict test fold?", args.predict_test_fold)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_predict(
@@ -135,7 +136,9 @@ def predict(args):
         n_seqs_per_batch=args.n_seqs_per_batch,
         store_sequence=not args.header_only,
         filter_size= args.filter_size,
-        type_loss=args.type_loss
+        type_loss=args.type_loss,
+        L_max=args.L_max,
+        test_fold = args.predict_test_fold
     )
 
 
@@ -418,6 +421,15 @@ def predict_subparser(subparsers):
 
     advanced_args = group.add_argument_group("Advanced arguments (if you trained your own model)")
 
+    advanced_args.add_argument(
+        "--predict_test_fold",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="If this flag is set, PARM will assume the input is the hdf5 file of the "
+        "test fold of a trained model. This is useful if you want to evaluate the "
+        "performance of a model that you trained. "
+    )
+        
     advanced_args.add_argument(
         "--L_max",
         type=int,

@@ -110,8 +110,8 @@ To train the PARM models for the AGS cell, you can run:
 ```sh
 # Fold 0 model
 parm train \
-  --input example_data/training_data/onehot/fold[1234].* \
-  --validation example_data/training_data/onehot/fold0.hdf5 \
+  --input example_data/training_data/fold[1234].* \
+  --validation example_data/training_data/fold0.hdf5 \
   --output AGS_fold0 \
   --cell_type AGS
 ```
@@ -144,29 +144,29 @@ Similarly, for the other folds, you can run:
 ```sh
 # Fold 1 model
 parm train \
-  --input example_data/training_data/onehot/fold[0234].* \
-  --validation example_data/training_data/onehot/fold1.hdf5 \
+  --input example_data/training_data/fold[0234].* \
+  --validation example_data/training_data/fold1.hdf5 \
   --output AGS_fold1 \
   --cell_type AGS
 
 # Fold 2 model
 parm train \
-  --input example_data/training_data/onehot/fold[0134].* \
-  --validation example_data/training_data/onehot/fold2.hdf5 \
+  --input example_data/training_data/fold[0134].* \
+  --validation example_data/training_data/fold2.hdf5 \
   --output AGS_fold2 \
   --cell_type AGS
 
 # Fold 3 model
 parm train \
-  --input example_data/training_data/onehot/fold[0124].* \
-  --validation example_data/training_data/onehot/fold3.hdf5 \
+  --input example_data/training_data/fold[0124].* \
+  --validation example_data/training_data/fold3.hdf5 \
   --output AGS_fold3 \
   --cell_type AGS
 
 # Fold 4 model
 parm train \
-  --input example_data/training_data/onehot/fold[0123].* \
-  --validation example_data/training_data/onehot/fold4.hdf5 \
+  --input example_data/training_data/fold[0123].* \
+  --validation example_data/training_data/fold4.hdf5 \
   --output AGS_fold4 \
   --cell_type AGS
 ```
@@ -193,7 +193,7 @@ For this, you can make use of the `--predict_test_fold` flag of the `PARM predic
 ```sh
 parm predict \
   --predict_test_fold \
-  --input example_data/training_data/onehot/test.hdf5 \
+  --input example_data/training_data/test.hdf5 \
   --output my_AGS_model_test \
   --model my_AGS_model/
 ```

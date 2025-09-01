@@ -87,7 +87,7 @@ def PARM_train(args):
         "cell_type": args.cell_type,
         "n_workers": args.n_workers,
         "measurement_column": args.measurement_column,
-        "type_criterion" : args.type_criterion
+        "type_loss" : args.type_loss
     }
 
     objective(**param_model)
@@ -110,7 +110,7 @@ def objective(
     measurement_column,
     adaptor=(False, False),
     n_workers=0,
-    type_criterion='poisson'
+    type_loss='poisson'
 ):
     """
     Objetive function to train and validate models.
@@ -139,10 +139,10 @@ def objective(
 
     ##################################
     ##Define losses
-    if type_criterion=='poisson':
+    if type_loss=='poisson':
         criterion = nn.PoissonNLLLoss(log_input=False)
     
-    elif type_criterion =='heteroscedastic':
+    elif type_loss =='heteroscedastic':
         def heteroscedastic_loss(y_true, y_pred_mu, y_pred_log_var):
             variance = torch.exp(y_pred_log_var)  # Ensure positivity
             return torch.mean((y_true - y_pred_mu) ** 2 / (2 * variance) + y_pred_log_var / 2)

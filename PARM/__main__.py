@@ -108,6 +108,7 @@ def train(args):
     print_arguments("L_max", args.L_max)
     print_arguments("Number of blocks", args.n_blocks)
     print_arguments("Filter size", args.filter_size)
+    print_arguments("Loss function type", args.type_loss)
 
     print("=" * 80)
     PARM_train(args)
@@ -349,6 +350,14 @@ def train_subparser(subparsers):
         default=125,
         type=int,
         help="Number of filters in convolution layers (default: 125)",
+    )
+
+    model_args.add_argument(
+        "--type_loss",
+        default = 'poisson',
+        choices=['MSE', 'poisson', 'heteroscedastic'],
+        type = str,
+        help=' Type of loss function to use for the model. Default is "poisson". Other options are "MSE" and "heteroscedastic".'
     )
 
     other_args = group.add_argument_group("Other")

@@ -153,7 +153,7 @@ def objective(
     ###Load model
 
     # cell_type_strip_replicates = celltype.replace('pNK7_','').replace('_B','')
-    model = load_PARM(L_max=L_max, n_block=n_block, filter_size=filter_size, train=True)
+    model = load_PARM(L_max=L_max, n_block=n_block, filter_size=filter_size, train=True, type_loss=type_loss)
     dummybatch = torch.zeros(1, 4, L_max)
 
     if torch.cuda.is_available():

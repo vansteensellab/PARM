@@ -87,6 +87,7 @@ def PARM_train(args):
         "cell_type": args.cell_type,
         "n_workers": args.n_workers,
         "measurement_column": args.measurement_column,
+        "type_criterion" : args.type_criterion
     }
 
     objective(**param_model)
@@ -109,6 +110,7 @@ def objective(
     measurement_column,
     adaptor=(False, False),
     n_workers=0,
+    type_criterion='poisson'
 ):
     """
     Objetive function to train and validate models.
@@ -137,8 +139,15 @@ def objective(
 
     ##################################
     ##Define losses
-
-    criterion = nn.PoissonNLLLoss(log_input=False)
+    if type_criterion=='poisson':
+        criterion = nn.PoissonNLLLoss(log_input=False)
+    
+    elif type_criterion =='heteroscedastic':
+        def heteroscedastic_loss(y_true, y_pred_mu, y_pred_log_var):
+            variance = torch.exp(y_pred_log_var)  # Ensure positivity
+            return torch.mean((y_true - y_pred_mu) ** 2 / (2 * variance) + y_pred_log_var / 2)
+        
+        criterion = heteroscedastic_loss
 
     ###############################################
     ###Load model
@@ -403,10 +412,11 @@ def train_loop(
         pred = model(X)
 
         if batch_ndx % 13 == 0:
-            y_train_predicted = np.append(
-                y_train_predicted, pred.cpu().detach().numpy(), axis=0
-            )
+            if 'heteroscedastic' in criterion.__name__:  pred_store = pred[0].cpu().detach().numpy()
+            else: pred_store = pred.cpu().detach().numpy()
+            y_train_predicted = np.append(y_train_predicted, pred_store, axis=0)
             y_train_true = np.append(y_train_true, y.cpu().detach().numpy(), axis=0)
+        
 
         if betas[0] != 0 or betas[1] != 0:
 
@@ -417,10 +427,17 @@ def train_loop(
                 torch.norm(weight, p=1) for _, weight in model.named_parameters()
             )
 
-            loss = criterion(pred, y) + l2_norm * betas[1] + l1_norm * betas[0]
+            if 'heteroscedastic' in criterion.__name__: 
+                loss = criterion(y, pred[0], pred[1])  + l2_norm*betas[1] + l1_norm*betas[0]
+            else: 
+                loss = criterion(pred, y)  + l2_norm*betas[1] + l1_norm*betas[0]
+            
 
         else:
-            loss = criterion(pred, y)
+            if 'heteroscedastic' in criterion.__name__: 
+                loss = criterion(y, pred[0], pred[1])  
+            else: 
+                loss = criterion(pred, y) 
 
         # Backpropagation
 
@@ -495,10 +512,12 @@ def validation_loop(
             pred = model(X)
 
             if batch_ndx % 5 == 0:
-                y_val_predicted = np.append(
-                    y_val_predicted, pred.cpu().detach().numpy(), axis=0
-                )
+                if 'heteroscedastic' in criterion.__name__:  pred_store = pred[0].cpu().detach().numpy()
+                else: pred_store = pred.cpu().detach().numpy()
+                
+                y_val_predicted = np.append(y_val_predicted, pred_store, axis=0)
                 y_val_real = np.append(y_val_real, y.cpu().detach().numpy(), axis=0)
+                
 
             if betas[0] != 0 or betas[1] != 0:
 
@@ -510,10 +529,18 @@ def validation_loop(
                     torch.norm(weight, p=2) for _, weight in model.named_parameters()
                 )
 
-                loss = criterion(pred, y) + l2_norm * betas[1] + l1_norm * betas[0]
+                if 'heteroscedastic' in criterion.__name__: 
+                    loss = criterion(y, pred[0], pred[1])  + l2_norm*betas[1] + l1_norm*betas[0]
+
+                else: 
+                    loss = criterion(pred, y)  + l2_norm*betas[1] + l1_norm*betas[0]
+
 
             else:
-                loss = criterion(pred, y)
+                if 'heteroscedastic' in criterion.__name__:
+                    loss = criterion(y, pred[0], pred[1])
+                else:
+                    loss = criterion(pred, y)
 
             # Backpropagation
 

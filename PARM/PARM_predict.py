@@ -174,7 +174,16 @@ def get_test_fold_predictions(
         # Load measured values
         measured = f["Y"][f"Log2RPM_{cell_type}"][:]
         # Load the feature names of each fragment
-        feature_names = f["FEAT"]["FEATname"][:].astype(str)
+        try: 
+            feature_names = f["FEAT"]["FEATname"][:].astype(str)
+        except: 
+            feat_type = f["FEAT/FEATtype"][:].astype(str)
+            feat_start = f["FEAT/FEATstart"][:].astype(str)
+            feat_end = f["FEAT/FEATend"][:].astype(str)
+            feature_names = [
+                f"{t}_{s}_{e}"
+                for t, s, e in zip(feat_type, feat_start, feat_end)
+            ]
 
     log(f"Loaded {len(sequences)} test fragments")
 

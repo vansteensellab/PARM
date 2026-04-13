@@ -173,7 +173,7 @@ def get_test_fold_predictions(
             dict_features_int = {'TSS' :0 , 'EnhA' : 1 , 'peaks' : 2, 'EnhAmany' : 3, 'EnhAstrong' : 4, 'others':99}
             int_features = dict_features_int[features_fragments_selection]
 
-            feature_index = np.array(file['FEAT']['FEATtype'])
+            feature_index = np.array(f['FEAT']['FEATtype'][:])
             index = np.arange(len(feature_index))
             index = index[(feature_index == int_features)]
         

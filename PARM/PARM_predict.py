@@ -186,17 +186,17 @@ def get_test_fold_predictions(
         if features_fragments_selection is not False: measured = measured[index]
         # Load the feature names of each fragment
         try: 
-            feature_names = f["FEAT"]["FEATname"][:].astype(str)
+            feature_names = np.array(f["FEAT"]["FEATname"][:].astype(str))
             if features_fragments_selection is not False: feature_names = feature_names[index]
                 
         except: 
             feat_type = f["FEAT/FEATtype"][:].astype(str)
             feat_start = f["FEAT/FEATstart"][:].astype(str)
             feat_end = f["FEAT/FEATend"][:].astype(str)
-            feature_names = [
+            feature_names = np.array([
                 f"{t}_{s}_{e}"
                 for t, s, e in zip(feat_type, feat_start, feat_end)
-            ]
+            ])
             if features_fragments_selection is not False: feature_names = feature_names[index]
 
     log(f"Loaded {len(sequences)} test fragments")

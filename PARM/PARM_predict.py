@@ -151,7 +151,7 @@ def PARM_predict(
 
 
 def get_test_fold_predictions(
-    test_fold_path, list_of_models, cell_type, output_directory, FEATtype=False
+    test_fold_path, list_of_models, cell_type, output_directory, features_fragments_selection=False
 ):
     """
     Perform predictions on test fold data and create measured vs predicted plot.

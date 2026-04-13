@@ -169,9 +169,9 @@ def get_test_fold_predictions(
 
     # Load HDF5 file directly
     with h5py.File(test_fold_path, "r") as f:
-        if FEATtype is not False:
+        if features_fragments_selection is not False:
             dict_features_int = {'TSS' :0 , 'EnhA' : 1 , 'peaks' : 2, 'EnhAmany' : 3, 'EnhAstrong' : 4, 'others':99}
-            int_features = dict_features_int[FEATtype]
+            int_features = dict_features_int[features_fragments_selection]
 
             feature_index = np.array(file['FEAT']['FEATtype'])
             index = np.arange(len(feature_index))
@@ -180,14 +180,14 @@ def get_test_fold_predictions(
             
         # Load sequences (one-hot encoded)
         sequences = f["X"]["sequence"]["OneHotEncoding"][:]
-        if FEATtype is not False: sequences = sequences[index]
+        if features_fragments_selection is not False: sequences = sequences[index]
         # Load measured values
         measured = f["Y"][f"Log2RPM_{cell_type}"][:]
-        if FEATtype is not False: measured = measured[index]
+        if features_fragments_selection is not False: measured = measured[index]
         # Load the feature names of each fragment
         try: 
             feature_names = f["FEAT"]["FEATname"][:].astype(str)
-            if FEATtype is not False: feature_names = feature_names[index]
+            if features_fragments_selection is not False: feature_names = feature_names[index]
                 
         except: 
             feat_type = f["FEAT/FEATtype"][:].astype(str)
@@ -197,7 +197,7 @@ def get_test_fold_predictions(
                 f"{t}_{s}_{e}"
                 for t, s, e in zip(feat_type, feat_start, feat_end)
             ]
-            if FEATtype is not False: feature_names = feature_names[index]
+            if features_fragments_selection is not False: feature_names = feature_names[index]
 
     log(f"Loaded {len(sequences)} test fragments")
 

@@ -706,13 +706,13 @@ def evaluation_model_subparser(subparsers):
 
     group = subparsers.add_parser(
         "evaluation_model",
-        help="Evaluation of model. If provided, it can perform three test: \n"
+        help="Evaluation of model. If provided, it can perform three tests: \n"
         "1) Compute predictions of MPRA fragments and compare them with the measured activity \n (if --input_h5py_file is provided) \n"
         "2) Compute mutation effects of the mutagenesis library and compare with measurements (used in the PARM paper Fig 2c-e) \n"
         "        (if --file_input_mutagenesis_validation is provided, it can be found in the repo: ./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt). \n"
         "3) Check whether motifs are detected by the model. \n"
         " In a set of random sequences, we insert each motif from the database individually, compute the ISM, and measure the correlation between the attribution scores and the known motif. \n"
-        " (If --PWM_datasets is provided, HOCOMOCOv11 is used by default.)",
+        " (set in --PWM_datasets HOCOMOCOv11 is used by default.)",
         formatter_class=MyHelpFormatter,
         add_help=False,
         description="R|" + description,

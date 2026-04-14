@@ -360,6 +360,7 @@ def PARM_eval_model(model_dir,
     import os
     from .PARM_utils_load_model import load_PARM
     from .PARM_mutagenesis import dict_jaspar
+    from .PARM_predict import get_test_fold_predictions
 
 
 

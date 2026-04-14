@@ -1,3 +1,4 @@
+import enum
 
 
 
@@ -250,6 +251,7 @@ def insert_motifs_in_random_sequences(
 
 
 def run_predictions_validation_mutagenesis(promoters, models, batch_size, L_max, output_directory=False, 
+                                            cell_type=None
                                     ):
         """
         Return a dataframe with the effect of each mutation.
@@ -292,50 +294,52 @@ def run_predictions_validation_mutagenesis(promoters, models, batch_size, L_max,
         #Split promoters in batches of batch_size to compute the predictions
         batch_promoters = [promoters[i:i + batch_size] for i in range(0, len(promoters), batch_size)]
 
-        for it_batch, batch in enumerate(batch_promoters):
-            #print(f"           Computing mutation effect for batch {it_batch + 1} / {len(batch_promoters)}", flush=True)
+        for i_cell, cell in enumerate(cell_type.split("__")):
 
-            pred_mean = []
-            for model in models:
-                    #Make sure the sequence in batch are all in capital letters, otherwise the model will not be able to make the predictions
-                    sequences = batch.sequence.str.upper()
-                    pred_mean.append(get_prediction(sequences.to_list(), model, L_max=L_max))
+            for it_batch, batch in enumerate(batch_promoters):
+                #print(f"           Computing mutation effect for batch {it_batch + 1} / {len(batch_promoters)}", flush=True)
+
+                pred_mean = []
+                for model in models:
+                        #Make sure the sequence in batch are all in capital letters, otherwise the model will not be able to make the predictions
+                        sequences = batch.sequence.str.upper()
+                        model_pred = get_prediction(sequences.to_list(), model, L_max=L_max)[:, i_cell]
+                        pred_mean.append(model_pred)
+                
+                pred = np.mean(pred_mean, axis=0)
+                promoters.loc[batch.index, 'pred'] = pred
             
-            pred = np.mean(pred_mean, axis=0)
-
-            promoters.loc[batch.index, 'pred'] = pred
-        
-        
-        if output_directory is not False: 
-            promoters.to_csv(os.path.join(output_directory, "predictions_mutagenesis_validation_promoters.txt"), sep='\t', index=False)  
             
-        
-        #Now make the correlations between the predictions and the measurements for each promoter and cell line and save them in a txt file and make heatmaps of the correlations for each cell line and promoter
-        cells = ['HCT116', 'HepG2', 'K562', 'MCF7', 'LNCaP']
-        #Make from wide to long format the columns of the cells now are a single column with the name of the cell and the values are in a column with the name of the mutation score
-        promoters = promoters.melt(id_vars=['chr', 'start', 'end', 'strand', 'prom', 'mut_po', 'ref', 'alt', 'sequence', 'seq_type', 'oligo_identifyer', 'bc', 'pred'],
-                                value_vars=cells,
-                                var_name='cell',
-                                value_name='measurement')
-        
+            if output_directory is not False: 
+                promoters.to_csv(os.path.join(output_directory, "predictions_mutagenesis_validation_promoters.txt"), sep='\t', index=False)  
+                
+            
+            #Now make the correlations between the predictions and the measurements for each promoter and cell line and save them in a txt file and make heatmaps of the correlations for each cell line and promoter
+            cells = ['HCT116', 'HepG2', 'K562', 'MCF7', 'LNCaP']
+            #Make from wide to long format the columns of the cells now are a single column with the name of the cell and the values are in a column with the name of the mutation score
+            promoters = promoters.melt(id_vars=['chr', 'start', 'end', 'strand', 'prom', 'mut_po', 'ref', 'alt', 'sequence', 'seq_type', 'oligo_identifyer', 'bc', 'pred'],
+                                    value_vars=cells,
+                                    var_name='cell',
+                                    value_name='measurement')
+            
 
-        #Now group by cell and promoter and compute the correlation between the predictions and the measurements for each group
-        correlations = promoters.groupby(['cell', 'prom']).apply(lambda x: scipy.stats.pearsonr(x['pred'], x['measurement'])[0])
-        correlations = correlations.reset_index()
-        correlations.columns = ['cell', 'promoter', 'correlation']
-        #Now make a heatmap of the correlations for each cell line and promoter all together, the x axis will be the cell line and the y axis will be the promoter, the color will be the correlation value
-        heatmap_data = correlations.pivot(index='promoter', columns='cell', values='correlation')
+            #Now group by cell and promoter and compute the correlation between the predictions and the measurements for each group
+            correlations = promoters.groupby(['cell', 'prom']).apply(lambda x: scipy.stats.pearsonr(x['pred'], x['measurement'])[0])
+            correlations = correlations.reset_index()
+            correlations.columns = ['cell', 'promoter', 'correlation']
+            #Now make a heatmap of the correlations for each cell line and promoter all together, the x axis will be the cell line and the y axis will be the promoter, the color will be the correlation value
+            heatmap_data = correlations.pivot(index='promoter', columns='cell', values='correlation')
 
-        plt.figure(figsize=(10, 10))
-        #add legend
-        sns.heatmap(heatmap_data, annot=True, cmap='coolwarm', vmin=-1, vmax=1, linewidths=0.5, linecolor='black', cbar_kws={'label': 'R measurement-prediction'})
-        plt.xlabel("Cell line")
-        plt.ylabel("Promoter")
-        plt.title(f"Promoter mutagenesis validation library\n")
-        #Add legend with the correlation values
-        if output_directory:
-            plt.savefig(os.path.join(output_directory, f"heatmap_correlation_predictions_measurements_mutagenesis_validation_library.png"), bbox_inches='tight')
-        plt.close()
+            plt.figure(figsize=(10, 10))
+            #add legend
+            sns.heatmap(heatmap_data, annot=True, cmap='coolwarm', vmin=-1, vmax=1, linewidths=0.5, linecolor='black', cbar_kws={'label': 'R measurement-prediction'})
+            plt.xlabel("Cell line")
+            plt.ylabel("Promoter")
+            plt.title(f"Promoter mutagenesis validation library\n Predictions in {cell}")
+            #Add legend with the correlation values
+            if output_directory:
+                plt.savefig(os.path.join(output_directory, f"heatmap_correlation_predictions_measurements_mutagenesis_validation_library_{cell}.png"), bbox_inches='tight')
+            plt.close()
 
                 
         
@@ -435,6 +439,7 @@ def PARM_eval_model(model_dir,
             run_predictions_validation_mutagenesis(file, models=models, 
                                                     batch_size = batch_size, L_max=L_max, 
                                                     output_directory=output_directory, 
+                                                    cell_type=cell_type
                                     )
 
         print(

@@ -1069,6 +1069,10 @@ def run_motif_scanning(
                         if append:
                             start_motif_name = start_motif - 5
                             end_motif_name = end_motif - 5
+                        
+                        else:
+                            start_motif_name = start_motif
+                            end_motif_name = end_motif
 
                         if split_pos_neg:
                             if rho_pos_prob > threshold:

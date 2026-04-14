@@ -813,8 +813,8 @@ def evaluation_model_subparser(subparsers):
     optional_arguments.add_argument(
         "--batch_size",
         type=int,
-        default=1000,
-        help="Step 3) \n Number of sequences to compute the attribution at the same time. Relevant when not enough memory. \n Default (1000) \n",
+        default=2000,
+        help="Step 3) \n Number of sequences to compute the attribution at the same time. Relevant when not enough memory. \n Default (2000) \n",
     )
 
     optional_arguments.add_argument(

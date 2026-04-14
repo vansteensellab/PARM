@@ -710,9 +710,9 @@ def evaluation_model_subparser(subparsers):
         "1) Compute predictions of MPRA fragments and compare them with the measured activity \n (if --input_h5py_file is provided) \n"
         "2) Compute mutation effects of the mutagenesis library and compare with measurements (used in the PARM paper Fig 2c-e) \n"
         "        (if --file_input_mutagenesis_validation is provided, it can be found in the repo: ./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt). \n"
-        "3) Check if motifs are detected by the model. \n"
-        "     In a set of random sequences we insert each motif of the databases individually, compute the ISM and the correlation between the attribution and the know motif. \n"
-        "     (if --PWM_datasets is provided, by default it uses HOCOMOCOv11) \n",
+        "3) Check whether motifs are detected by the model. \n"
+        " In a set of random sequences, we insert each motif from the database individually, compute the ISM, and measure the correlation between the attribution scores and the known motif. \n"
+        " (If --PWM_datasets is provided, HOCOMOCOv11 is used by default.)",
         formatter_class=MyHelpFormatter,
         add_help=False,
         description="R|" + description,

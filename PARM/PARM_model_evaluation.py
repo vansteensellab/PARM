@@ -50,7 +50,7 @@ def insert_motifs_in_random_sequences(
     pylab.rcParams.update(params)
 
 
-    from PARM.PARM_mutagenesis import  get_one_hot, motif_attribution, run_motif_scanning
+    from .PARM_mutagenesis import  get_one_hot, motif_attribution, run_motif_scanning
     
 
 
@@ -280,6 +280,8 @@ def run_predictions_validation_mutagenesis(promoters, models, batch_size, L_max,
                 'ytick.labelsize':'large'}
         pylab.rcParams.update(params)
 
+        from .PARM_predict import get_prediction
+
 
         promoters = pd.read_csv(promoters, sep='\t')
         
@@ -291,7 +293,7 @@ def run_predictions_validation_mutagenesis(promoters, models, batch_size, L_max,
         batch_promoters = [promoters[i:i + batch_size] for i in range(0, len(promoters), batch_size)]
 
         for it_batch, batch in enumerate(batch_promoters):
-            print(f"           Computing mutation effect for batch {it_batch + 1} / {len(batch_promoters)}", flush=True)
+            #print(f"           Computing mutation effect for batch {it_batch + 1} / {len(batch_promoters)}", flush=True)
 
             pred_mean = []
             for model in models:
@@ -355,6 +357,11 @@ def PARM_eval_model(model_dir,
                     ):
     """
     """
+    import os
+    from .PARM_utils_load_model import load_PARM
+    from .PARM_mutagenesis import dict_jaspar
+
+
 
 
     #############

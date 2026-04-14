@@ -52,7 +52,7 @@ def main():
 
     # Evaluate model task =================================================================
     # ====================================================================================
-    eval_subparser(subparsers)
+    evaluation_model_subparser(subparsers)
 
 
     other_args = parser.add_argument_group("Other")
@@ -701,11 +701,11 @@ def plot_subparser(subparsers):
 
 #####Evaluation task of the model =================================================================
 
-def evluation_model_subparser(subparsers):
+def evaluation_model_subparser(subparsers):
     "Parses inputs from commandline and returns them as a Namespace object."
 
     group = subparsers.add_parser(
-        "evluation_model",
+        "evaluation_model",
         help="Evaluation of model by plotting test, mutagenesis library and motif in random sequence.",
         formatter_class=MyHelpFormatter,
         add_help=False,
@@ -718,6 +718,7 @@ def evluation_model_subparser(subparsers):
     required_args.add_argument(
         "--model",
         required=True,
+        nargs = '+',
         help="Path to the directory of the model. If you want to perform predictions "
         "for the pre-trained K562 model, for instance, this should be "
         "pre_trained_models/K562. If you have trained your own model, "
@@ -784,10 +785,12 @@ def evluation_model_subparser(subparsers):
         "--file_input_mutagenesis_validation",
         type=str,
         nargs="+",
-        # default = '/hpc/compgen/projects/CNN_SuRE/SuRE_CNN/analysis/lbarbadillamartinez/script/SuRE-CNN/PARM_eval/data/mutagenesis_validation_promoters.txt',
+        # default = './example_data/mutagenesis_library/mutagenesis_validation_promoters.txt',
         default=None,
-        help="File(s) of measured mutagenesis assays where the format of the file is, should contain at least the following columns: \n"
-        "   chr	start	end	strand	prom	mut_po	ref	alt	sequence	seq_type	oligo_identifyer	bc	HCT116	HepG2	K562	LNCaP	MCF7\n",
+        help="File of measured mutagenesis assays where the format of the file is, should contain at least the following columns: \n"
+        "   chr	start	end	strand	prom	mut_po	ref	alt	sequence	seq_type	oligo_identifyer	bc	HCT116	HepG2	K562	LNCaP	MCF7\n"
+        "File found in the example data: ./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt \n",
+
     )
 
 
@@ -816,7 +819,7 @@ def evluation_model_subparser(subparsers):
     )
 
 
-    group.set_defaults(func=eval_model)
+    group.set_defaults(func=evaluation_model)
 
 
 

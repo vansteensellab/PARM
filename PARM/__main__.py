@@ -765,13 +765,13 @@ def evaluation_model_subparser(subparsers):
         "--input_h5py_file",
         type=str,
         nargs="+",
-        help="Argument necessary for step 1 (Compute predictions of MPRA fragments). \n h5 file path, if several, separate them by a space. \n",
+        help="Step 1) \n Argument necessary for step 1 (Compute predictions of MPRA fragments). \n h5 file path, if several, separate them by a space. \n",
     )
 
     optional_arguments.add_argument(
         "--cell_type",
         required=True,
-        help="Cell line to work with (K562, HEPG2, hNPC, HCT166, MCF7, mESC or any combination of these separated by two underscores (__). Used in the input_h5py_file to select the right files to compute the predictions of the MPRA fragments. \n",
+        help="Step 1) \n  Cell line to work with (K562, HEPG2, hNPC, HCT166, MCF7, mESC or any combination of these separated by two underscores (__). Used in the input_h5py_file to select the right files to compute the predictions of the MPRA fragments. \n",
     )
 
     optional_arguments.add_argument(
@@ -779,7 +779,7 @@ def evaluation_model_subparser(subparsers):
         default="TSS",
         nargs="?",
         type=str,
-        help="Argument necessary for step 1 (Compute predictions of MPRA fragments). \n"
+        help="Step 1) \n  Argument necessary for step 1 (Compute predictions of MPRA fragments). \n"
         "  Features to use to select SuRE fragments of interest (default: TSS) \n"
         '     In humans choose from TSS, EnhA, peaks or a combination of them separated by "_" e.g. TSS_EnhA \t'
         '     In mice choose from TSS, EnhA_many or EnhA_strong a combination of them separated by "_". \n',
@@ -793,7 +793,7 @@ def evaluation_model_subparser(subparsers):
         nargs="+",
         # default = './example_data/mutagenesis_library/mutagenesis_validation_promoters.txt',
         default=None,
-        help="File of measured mutagenesis assays where the format of the file is, should contain at least the following columns: \n"
+        help="Step 2) \n  File of measured mutagenesis assays where the format of the file is, should contain at least the following columns: \n"
         "   chr	start	end	strand	prom	mut_po	ref	alt	sequence	seq_type	oligo_identifyer	bc	HCT116	HepG2	K562	LNCaP	MCF7\n"
         "File found in the example data: ./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt \n",
 
@@ -806,7 +806,7 @@ def evaluation_model_subparser(subparsers):
         type=str,
         nargs="+",
         default = 'https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt',
-        help="Files or paths of the PWM datasets in jaspar format to use to study motifs in the model. If several, separate them by a space. \n"
+        help="Step 3) \n Files or paths of the PWM datasets in jaspar format to use to study motifs in the model. If several, separate them by a space. \n"
         "e.g. https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
     )
 
@@ -814,14 +814,14 @@ def evaluation_model_subparser(subparsers):
         "--batch_size",
         type=int,
         default=1000,
-        help="Number of sequences to compute the attribution at the same time. Relevant when not enough memory. \n Default (1000) \n",
+        help="Step 3) \n Number of sequences to compute the attribution at the same time. Relevant when not enough memory. \n Default (1000) \n",
     )
 
     optional_arguments.add_argument(
         "--num_sequences_rnd",
         type=int,
         default=100,
-        help="Number of random sequences to generate for the motif insertion. \n Default (100) \n"
+        help="Step 3) \n Number of random sequences to generate for the motif insertion. \n Default (100) \n"
     )
 
 

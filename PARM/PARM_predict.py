@@ -118,7 +118,7 @@ def PARM_predict(
             predictions_all_folds = []
             for model in list_of_models:
                 predictions_all_folds.append(
-                    get_prediction(tmp.sequence.to_list(), model)
+                    get_prediction(tmp.sequence.to_list(), model, L_max=L_max)
                 )
                 pbar.update(1)
             # Now, take the average of the predictions and add to the tmp[model_name]
@@ -174,7 +174,16 @@ def get_test_fold_predictions(
         # Load measured values
         measured = f["Y"][f"Log2RPM_{cell_type}"][:]
         # Load the feature names of each fragment
-        feature_names = f["FEAT"]["FEATname"][:].astype(str)
+        try: 
+            feature_names = f["FEAT"]["FEATname"][:].astype(str)
+        except: 
+            feat_type = f["FEAT/FEATtype"][:].astype(str)
+            feat_start = f["FEAT/FEATstart"][:].astype(str)
+            feat_end = f["FEAT/FEATend"][:].astype(str)
+            feature_names = [
+                f"{t}_{s}_{e}"
+                for t, s, e in zip(feat_type, feat_start, feat_end)
+            ]
 
     log(f"Loaded {len(sequences)} test fragments")
 
@@ -308,7 +317,7 @@ def get_test_fold_predictions(
     plt.close()
 
 
-def get_prediction(sequence, complete_model):
+def get_prediction(sequence, complete_model, L_max=600):
     """
     Predicts promoter activity score for input sequence
     """
@@ -319,7 +328,7 @@ def get_prediction(sequence, complete_model):
     if torch.cuda.is_available():
         complete_model = complete_model.cuda()
     onehot_fragment = torch.tensor(
-        np.float32(sequence_to_onehot(sequence, L_max=len(sequence[0])))
+        np.float32(sequence_to_onehot(sequence, L_max=L_max))
     ).permute(0, 2, 1)
     if torch.cuda.is_available():
         onehot_fragment = onehot_fragment.cuda()

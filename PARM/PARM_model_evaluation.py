@@ -218,33 +218,74 @@ def insert_motifs_in_random_sequences(
 
             # Now plot the distribution of correlations
             fig, ax = plt.subplots(1, 1, figsize=(8, 8))
-            sns.histplot(
-                 motif_correlation,
-                 x="correlation",
-                 kde=True,
-                 bins=50,
-                 ax=ax,
-                 hue="database_motifs",
-                 color="black",
-                 legend=True,
-                 multiple="stack",
-                 palette="Set1",
-            )
-            # Remove legend of frame and place it outside
-            sns.move_legend(
-                 ax,
-                 "upper left",
-                 bbox_to_anchor=(1, 1),
-                 frameon=False,
-                 title="Motif database",
-            )
+            #If database is only one, dont use hue, otherwise use hue to separate the databases
+            if len(set(database_id_cell)) == 1:
+                sns.histplot(
+                    motif_correlation,
+                    x="correlation",
+                    kde=True,
+                    bins=50,
+                    ax=ax,
+                    color="black",
+                    legend=True,
+                    multiple="stack",
+                )
+            else:
+                sns.histplot(
+                    motif_correlation,
+                    x="correlation",
+                    kde=True,
+                    bins=50,
+                    ax=ax,
+                    hue="database_motifs",
+                    color="black",
+                    legend=True,
+                    multiple="stack",
+                    palette="Set1",
+                )
+                # Remove legend of frame and place it outside
+                sns.move_legend(
+                    ax,
+                    "upper left",
+                    bbox_to_anchor=(1, 1),
+                    frameon=False,
+                    title="Motif database",
+                )
             ax.set_xlabel("Correlation between known motif and model motif")
             ax.set_ylabel("Frequency")
-            ax.set_title(f"Model: {model_id}\n Cell type {cell}\n")
+            #Check how many motifs are higher than 0.5
+            num_motifs_high_corr = (motif_correlation["correlation"] > 0.5).sum()
+            #compute average correlation of the motifs with correlation higher than 0.5
+            avg_corr_high_corr = motif_correlation[motif_correlation["correlation"] > 0.5]["correlation"].mean()
+            ax.set_title(f"Model: {model_id}\n Cell type {cell}\n Motifs with corr. > 0.5: {num_motifs_high_corr} out of {len(motif_correlation)} with avg. corr.: {avg_corr_high_corr:.2f}")
+            
             if output_directory:
                 plt.savefig(
                      os.path.join(output_directory,
-                      f"hist_motif_correlation_cell_{cell}.png"),
+                      f"3analysis_hist_motif_correlation_cell_{cell}.png"),
+                     bbox_inches="tight",
+                )
+            
+
+            #Check the correlation between the forward and reverse motif (so that is, the same motif name but one with - at the end) and plot it in a scatter plot
+            motif_correlation["motif_id_no_rev"] = motif_correlation["motif_id"].apply(lambda x: x.replace("-", ""))
+            motif_correlation["is_rev"] = motif_correlation["motif_id"].apply(lambda x: "-" in x)
+            motif_correlation_forward = motif_correlation[motif_correlation["is_rev"] == False]
+            motif_correlation_reverse = motif_correlation[motif_correlation["is_rev"] == True]
+            motif_correlation_forward = motif_correlation_forward.set_index("motif_id_no_rev")
+            motif_correlation_reverse = motif_correlation_reverse.set_index("motif_id_no_rev")
+            motif_correlation_forward = motif_correlation_forward.loc[motif_correlation_reverse.index]
+            motif_correlation_reverse = motif_correlation_reverse.loc[motif_correlation_forward.index]
+            #Now plot the correlation between the forward and reverse motif
+            fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+            sns.scatterplot(x=motif_correlation_forward["correlation"], y=motif_correlation_reverse["correlation"], ax=ax, color="black")
+            ax.set_xlabel("Correlation forward motif")
+            ax.set_ylabel("Correlation reverse motif")
+            ax.set_title(f"Model: {model_id}\n Cell type {cell}\n Correlation between forward and reverse motif correlation: {motif_correlation_forward['correlation'].corr(motif_correlation_reverse['correlation']):.2f}")
+            if output_directory:
+                plt.savefig(
+                     os.path.join(output_directory,
+                      f"3analysis_scatter_correlation_forward_reverse_motif_cell_{cell}.png"),
                      bbox_inches="tight",
                 )
 
@@ -311,7 +352,7 @@ def run_predictions_validation_mutagenesis(promoters, models, batch_size, L_max,
             
             
             if output_directory is not False: 
-                promoters.to_csv(os.path.join(output_directory, "predictions_mutagenesis_validation_promoters.txt"), sep='\t', index=False)  
+                promoters.to_csv(os.path.join(output_directory, "2analysis_predictions_mutagenesis_validation_promoters.txt"), sep='\t', index=False)  
                 
             
             #Now make the correlations between the predictions and the measurements for each promoter and cell line and save them in a txt file and make heatmaps of the correlations for each cell line and promoter
@@ -338,7 +379,7 @@ def run_predictions_validation_mutagenesis(promoters, models, batch_size, L_max,
             plt.title(f"Promoter mutagenesis validation library\n Predictions in {cell}")
             #Add legend with the correlation values
             if output_directory:
-                plt.savefig(os.path.join(output_directory, f"heatmap_correlation_predictions_measurements_mutagenesis_validation_library_{cell}.png"), bbox_inches='tight')
+                plt.savefig(os.path.join(output_directory, f"2analysis_heatmap_correlation_predictions_measurements_mutagenesis_validation_library_{cell}.png"), bbox_inches='tight')
             plt.close()
 
                 

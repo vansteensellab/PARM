@@ -411,7 +411,7 @@ def PARM_eval_model(model_dir,
 
 
     #############
-    
+    output_directory = os.path.join(output_directory, f"model_eval_{cell_type}")
     #If it doesn't exist, create it
     if not os.path.exists(output_directory): os.makedirs(output_directory)
     

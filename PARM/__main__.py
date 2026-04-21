@@ -235,6 +235,7 @@ def evaluation_model(args):
     print_arguments("Batch size to compute the attributions", args.batch_size)
     print_arguments("Number of random sequences to generate for motif insertion", args.num_sequences_rnd)
     print_arguments("Normalization method to use for the predictions and measurements", args.normalization_method)
+    print_arguments("Filter size of the model", args.filter_size)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_eval_model(
@@ -249,7 +250,8 @@ def evaluation_model(args):
         PWM_datasets=args.PWM_datasets,
         batch_size=args.batch_size,
         num_sequences_rnd=args.num_sequences_rnd,
-        normalization_method=args.normalization_method
+        normalization_method=args.normalization_method,
+        filter_size=args.filter_size,
     )
 
 
@@ -758,6 +760,13 @@ def evaluation_model_subparser(subparsers):
         nargs="?",
         type=int,
         help="General argument. \n Maximum length of fragments (default: 600) \n",
+    )
+    
+    optional_arguments.add_argument(
+        "--filter_size",
+        default=125,
+        type=int,
+        help="General argument. \n Number of filters in convolution layers (default: 125) \n",
     )
 
     # Arguments for the input files

@@ -399,7 +399,8 @@ def PARM_eval_model(model_dir,
                     PWM_datasets,
                     batch_size,
                     num_sequences_rnd,
-                    normalization_method="Log2RPM"
+                    normalization_method="Log2RPM",
+                    filter_size=125
                     ):
     """
     """
@@ -429,7 +430,13 @@ def PARM_eval_model(model_dir,
     # 1. Load the model
     models = []
     for it_model_dir in model_dir:
-        models.append(load_PARM(it_model_dir, train=False, type_loss = criterion))
+        models.append(
+            load_PARM(
+                it_model_dir,
+                train=False,
+                type_loss = criterion,
+                filter_size=filter_size,
+            ))
 
     print(
         f"\n --------------------------------------------------------------------------------------------------------\n\n",

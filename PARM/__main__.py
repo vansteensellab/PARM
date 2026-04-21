@@ -234,6 +234,7 @@ def evaluation_model(args):
     print_arguments("PWM datasets to use to study motifs in the model", args.PWM_datasets)
     print_arguments("Batch size to compute the attributions", args.batch_size)
     print_arguments("Number of random sequences to generate for motif insertion", args.num_sequences_rnd)
+    print_arguments("Normalization method to use for the predictions and measurements", args.normalization_method)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_eval_model(
@@ -247,7 +248,8 @@ def evaluation_model(args):
         file_input_mutagenesis_validation=args.file_input_mutagenesis_validation,
         PWM_datasets=args.PWM_datasets,
         batch_size=args.batch_size,
-        num_sequences_rnd=args.num_sequences_rnd
+        num_sequences_rnd=args.num_sequences_rnd,
+        normalization_method=args.normalization_method
     )
 
 
@@ -783,6 +785,13 @@ def evaluation_model_subparser(subparsers):
         "  Features to use to select SuRE fragments of interest (default: TSS) \n"
         '     In humans choose from TSS, EnhA, peaks or a combination of them separated by "_" e.g. TSS_EnhA \t'
         '     In mice choose from TSS, EnhA_many or EnhA_strong a combination of them separated by "_". \n',
+    )
+    
+    optional_arguments.add_argument(
+        "--normalization_method",
+        type=str,
+        default="Log2RPM",
+        help="Step 1) \n Normalization method to use for the predictions and measurements. \n Default (Log2RPM) \n"
     )
     
 

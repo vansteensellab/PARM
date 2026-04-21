@@ -398,7 +398,8 @@ def PARM_eval_model(model_dir,
                     file_input_mutagenesis_validation,
                     PWM_datasets,
                     batch_size,
-                    num_sequences_rnd
+                    num_sequences_rnd,
+                    normalization_method="Log2RPM"
                     ):
     """
     """
@@ -445,7 +446,8 @@ def PARM_eval_model(model_dir,
                 list_of_models=models,
                 cell_type=cell_type,
                 output_directory=output_directory,
-                features_fragments_selection = features_fragments_selection
+                features_fragments_selection = features_fragments_selection,
+                normalization_method=normalization_method
             )
 
         print(

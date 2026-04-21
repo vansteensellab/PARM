@@ -175,12 +175,32 @@ def get_test_fold_predictions(
     # Load HDF5 file directly
     with h5py.File(test_fold_path, "r") as f:
         if features_fragments_selection is not False:
-            dict_features_int = {'TSS' :0 , 'EnhA' : 1 , 'peaks' : 2, 'EnhAmany' : 3, 'EnhAstrong' : 4, 'others':99}
-            int_features = dict_features_int[features_fragments_selection]
+            dict_features_int = {
+                "TSS": 0,
+                "EnhA": 1,
+                "peaks": 2,
+                "EnhAmany": 3,
+                "EnhAstrong": 4,
+                "others": 99,
+            }
 
-            feature_index = np.array(f['FEAT']['FEATtype'][:])
+            # Workaround: allow selecting both TSS and EnhA fragments together.
+            if features_fragments_selection == "TSS_EnhA":
+                selected_feature_types = np.array([0, 1])
+            else:
+                if features_fragments_selection not in dict_features_int:
+                    valid = list(dict_features_int.keys()) + ["TSS_EnhA"]
+                    raise ValueError(
+                        f"Unknown features_fragments_selection '{features_fragments_selection}'. "
+                        f"Expected one of: {valid}."
+                    )
+                selected_feature_types = np.array(
+                    [dict_features_int[features_fragments_selection]]
+                )
+
+            feature_index = np.array(f["FEAT"]["FEATtype"][:])
             index = np.arange(len(feature_index))
-            index = index[(feature_index == int_features)]
+            index = index[np.isin(feature_index, selected_feature_types)]
         
             
         # Load sequences (one-hot encoded)

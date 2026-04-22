@@ -268,7 +268,7 @@ def objective(
 
     if scheduler:
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, total_steps, eta_min=0, last_epoch=-1, verbose=False
+            optimizer, total_steps, eta_min=0, last_epoch=-1
         )
 
     if warmup:

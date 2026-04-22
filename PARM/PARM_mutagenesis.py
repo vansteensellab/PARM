@@ -1069,6 +1069,10 @@ def run_motif_scanning(
                         if append:
                             start_motif_name = start_motif - 5
                             end_motif_name = end_motif - 5
+                        
+                        else:
+                            start_motif_name = start_motif
+                            end_motif_name = end_motif
 
                         if split_pos_neg:
                             if rho_pos_prob > threshold:
@@ -1776,7 +1780,6 @@ def find_hits_and_make_logo(
 
     ##add selected hits
     hits_to_plot_row1, hits_to_plot_row2 = [], []
-
     for it_rows, motif in hits.iterrows():
         start_motif, end_motif = motif['start'], motif['end']
 

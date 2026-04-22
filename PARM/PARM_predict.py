@@ -118,7 +118,7 @@ def PARM_predict(
             predictions_all_folds = []
             for model in list_of_models:
                 predictions_all_folds.append(
-                    get_prediction(tmp.sequence.to_list(), model, L_max=L_max)
+                    get_prediction(tmp.sequence.to_list(), model, L_max = L_max)
                 )
                 pbar.update(1)
             # Now, take the average of the predictions and add to the tmp[model_name]
@@ -151,7 +151,12 @@ def PARM_predict(
 
 
 def get_test_fold_predictions(
-    test_fold_path, list_of_models, cell_type, output_directory
+    test_fold_path, 
+    list_of_models, 
+    cell_type, 
+    output_directory, 
+    features_fragments_selection=False,
+    normalization_method="Log2RPM"
 ):
     """
     Perform predictions on test fold data and create measured vs predicted plot.
@@ -169,21 +174,55 @@ def get_test_fold_predictions(
 
     # Load HDF5 file directly
     with h5py.File(test_fold_path, "r") as f:
+        if features_fragments_selection is not False:
+            dict_features_int = {
+                "TSS": 0,
+                "EnhA": 1,
+                "peaks": 2,
+                "EnhAmany": 3,
+                "EnhAstrong": 4,
+                "others": 99,
+            }
+
+            # Workaround: allow selecting both TSS and EnhA fragments together.
+            if features_fragments_selection == "TSS_EnhA":
+                selected_feature_types = np.array([0, 1])
+            else:
+                if features_fragments_selection not in dict_features_int:
+                    valid = list(dict_features_int.keys()) + ["TSS_EnhA"]
+                    raise ValueError(
+                        f"Unknown features_fragments_selection '{features_fragments_selection}'. "
+                        f"Expected one of: {valid}."
+                    )
+                selected_feature_types = np.array(
+                    [dict_features_int[features_fragments_selection]]
+                )
+
+            feature_index = np.array(f["FEAT"]["FEATtype"][:])
+            index = np.arange(len(feature_index))
+            index = index[np.isin(feature_index, selected_feature_types)]
+        
+            
         # Load sequences (one-hot encoded)
         sequences = f["X"]["sequence"]["OneHotEncoding"][:]
+        if features_fragments_selection is not False: sequences = sequences[index]
         # Load measured values
-        measured = f["Y"][f"Log2RPM_{cell_type}"][:]
+        measured = f["Y"][f"{normalization_method}_{cell_type}"][:]
+        if features_fragments_selection is not False: measured = measured[index]
         # Load the feature names of each fragment
         try: 
-            feature_names = f["FEAT"]["FEATname"][:].astype(str)
+            feature_names = np.array(f["FEAT"]["FEATname"][:].astype(str))
+            if features_fragments_selection is not False: feature_names = feature_names[index]
+                
         except: 
             feat_type = f["FEAT/FEATtype"][:].astype(str)
             feat_start = f["FEAT/FEATstart"][:].astype(str)
             feat_end = f["FEAT/FEATend"][:].astype(str)
-            feature_names = [
+            feature_names = np.array([
                 f"{t}_{s}_{e}"
                 for t, s, e in zip(feat_type, feat_start, feat_end)
-            ]
+            ])
+            if features_fragments_selection is not False: feature_names = feature_names[index]
 
     log(f"Loaded {len(sequences)} test fragments")
 
@@ -221,8 +260,8 @@ def get_test_fold_predictions(
     # Now, make a dataframe with the predictions and measured values, and the feature names
     results_df = pd.DataFrame(
         {
-            "measured_Log2PM": measured_flat,
-            "predicted_Log2RPM": avg_predictions,
+            f"measured_{normalization_method}": measured_flat,
+            f"predicted_{normalization_method}": avg_predictions,
             "feature": feature_names,
         }
     )
@@ -275,22 +314,22 @@ def get_test_fold_predictions(
     # Now, group prediction by feature and plot the measured vs. predicted values
     grouped_results = (
         results_df.groupby("feature")
-        .agg({"measured_Log2PM": "mean", "predicted_Log2RPM": "mean"})
+        .agg({f"measured_{normalization_method}": "mean", f"predicted_{normalization_method}": "mean"})
         .reset_index()
     )
 
     # plot the grouped results
     fig, ax = plt.subplots(figsize=(8, 7))
     h = ax.hist2d(
-        grouped_results["predicted_Log2RPM"],
-        grouped_results["measured_Log2PM"],
+        grouped_results[f"predicted_{normalization_method}"],
+        grouped_results[f"measured_{normalization_method}"],
         bins=100,
         norm=colors.LogNorm(),
         cmap="viridis",
     )
     # Add correlation annotation
     pearson_r_grouped, _ = pearsonr(
-        grouped_results["measured_Log2PM"], grouped_results["predicted_Log2RPM"]
+        grouped_results[f"measured_{normalization_method}"], grouped_results[f"predicted_{normalization_method}"]
     )
     
     log(f"Pearson correlation (feature level): {pearson_r_grouped:.3f}")
@@ -305,8 +344,8 @@ def get_test_fold_predictions(
     )
     # Add diagonal line
     ax.plot([min_val, max_val], [min_val, max_val], "r--", alpha=0.8, linewidth=2)
-    ax.set_xlabel("Predicted Log2RPM", fontsize=12)
-    ax.set_ylabel("Measured Log2RPM", fontsize=12)
+    ax.set_xlabel(f"Predicted {normalization_method}", fontsize=12)
+    ax.set_ylabel(f"Measured {normalization_method}", fontsize=12)
     ax.set_title(f"Test Fold Results - {cell_type} (Grouped by Feature)", fontsize=14)
     plt.colorbar(h[3], ax=ax, label="Feature count")
     # Save plot

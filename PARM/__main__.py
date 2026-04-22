@@ -50,6 +50,11 @@ def main():
     # ====================================================================================
     plot_subparser(subparsers)
 
+    # Evaluate model task =================================================================
+    # ====================================================================================
+    evaluation_model_subparser(subparsers)
+
+
     other_args = parser.add_argument_group("Other")
     other_args.add_argument(
         "-h",
@@ -206,6 +211,47 @@ def plot(args):
         attribution_threshold=args.attribution_threshold,
         plot_format=args.plot_format,
         attribution_range=attribution_range,
+    )
+
+
+
+def evaluation_model(args):
+    # Lazy import to reduce initial loading time
+    from .PARM_model_evaluation import PARM_eval_model
+    print(description)
+    print("=" * 80)
+    print("{: ^80}".format("Evaluation model"))
+    print("-" * 80)
+    
+    print_arguments("Model", args.model)
+    print_arguments("Output directory", args.output_directory)
+    print_arguments("Criterion used to train the model", args.criterion)
+    print_arguments("L_max", args.L_max)
+    print_arguments("Input h5py file(s) to compute predictions of MPRA fragments", args.input_h5py_file)
+    print_arguments("Cell type to work with", args.cell_type)
+    print_arguments("Features to select the fragments of interest", args.features_fragments_selection)
+    print_arguments("File(s) of measured mutagenesis assays to validate the model", args.file_input_mutagenesis_validation)
+    print_arguments("PWM datasets to use to study motifs in the model", args.PWM_datasets)
+    print_arguments("Batch size to compute the attributions", args.batch_size)
+    print_arguments("Number of random sequences to generate for motif insertion", args.num_sequences_rnd)
+    print_arguments("Normalization method to use for the predictions and measurements", args.normalization_method)
+    print_arguments("Filter size of the model", args.filter_size)
+    # Same but now filling the output with spaces so it gets 80 characters
+    print("=" * 80)
+    PARM_eval_model(
+        model_dir=args.model,
+        output_directory=args.output_directory,
+        criterion=args.criterion,
+        L_max=args.L_max,
+        input_h5py_file=args.input_h5py_file,
+        cell_type=args.cell_type,
+        features_fragments_selection=args.features_fragments_selection,
+        file_input_mutagenesis_validation=args.file_input_mutagenesis_validation,
+        PWM_datasets=args.PWM_datasets,
+        batch_size=args.batch_size,
+        num_sequences_rnd=args.num_sequences_rnd,
+        normalization_method=args.normalization_method,
+        filter_size=args.filter_size,
     )
 
 
@@ -657,7 +703,155 @@ def plot_subparser(subparsers):
 
     group.set_defaults(func=plot)
 
+#####Evaluation task of the model =================================================================
 
+def evaluation_model_subparser(subparsers):
+    "Parses inputs from commandline and returns them as a Namespace object."
+
+    group = subparsers.add_parser(
+        "evaluation_model",
+        help="Evaluation of model. If provided, it can perform three tests: \n"
+        "1) Compute predictions of MPRA fragments and compare them with the measured activity \n (if --input_h5py_file is provided) \n"
+        "2) Compute mutation effects of the mutagenesis library and compare with measurements (used in the PARM paper Fig 2c-e) \n"
+        "        (if --file_input_mutagenesis_validation is provided, it can be found in the repo: ./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt). \n"
+        "3) Check whether motifs are detected by the model. \n"
+        " In a set of random sequences, we insert each motif from the database individually, compute the ISM, and measure the correlation between the attribution scores and the known motif. \n"
+        " (set in --PWM_datasets HOCOMOCOv11 is used by default.)",
+        formatter_class=MyHelpFormatter,
+        add_help=False,
+        description="R|" + description,
+    )
+
+    ##Required arguments
+    required_args = group.add_argument_group("Required arguments")
+
+    required_args.add_argument(
+        "--model",
+        required=True,
+        nargs = '+',
+        help="Path to the directory of the model. If you want to perform predictions "
+        "for the pre-trained K562 model, for instance, this should be "
+        "pre_trained_models/K562. If you have trained your own model, "
+        "you should pass the path to the directory where the .parm files are stored. ",
+    )
+
+    required_args.add_argument(
+        "--output_directory",
+        type=str,
+        required = True,
+        help="Directory where to save the plots, if False the plots will be shown in the screen.\n",
+    )
+
+    #Optional arguments
+    optional_arguments = group.add_argument_group("Optional arguments")
+
+    #Optional model arguments
+    optional_arguments.add_argument(
+         "--criterion",
+         type=str, 
+         choices=['poisson', 'heteroscedastic'],
+            default='poisson',
+            help="Criterion used to train the model, important for architecture. \n"
+    )
+
+    optional_arguments.add_argument(
+        "--L_max",
+        default=600,
+        nargs="?",
+        type=int,
+        help="General argument. \n Maximum length of fragments (default: 600) \n",
+    )
+    
+    optional_arguments.add_argument(
+        "--filter_size",
+        default=125,
+        type=int,
+        help="General argument. \n Number of filters in convolution layers (default: 125) \n",
+    )
+
+    # Arguments for the input files
+
+    ###Arguments for STEP 1
+    optional_arguments.add_argument(
+        "--input_h5py_file",
+        type=str,
+        nargs="+",
+        help="Step 1) \n Argument necessary for step 1 (Compute predictions of MPRA fragments). \n h5 file path, if several, separate them by a space. \n",
+    )
+
+    optional_arguments.add_argument(
+        "--cell_type",
+        required=True,
+        help="Step 1) \n  Cell line to work with (K562, HEPG2, hNPC, HCT166, MCF7, mESC or any combination of these separated by two underscores (__). Used in the input_h5py_file to select the right files to compute the predictions of the MPRA fragments. \n",
+    )
+
+    optional_arguments.add_argument(
+        "--features_fragments_selection",
+        default="TSS",
+        nargs="?",
+        type=str,
+        help="Step 1) \n  Argument necessary for step 1 (Compute predictions of MPRA fragments). \n"
+        "  Features to use to select SuRE fragments of interest (default: TSS) \n"
+        '     In humans choose from TSS, EnhA, peaks or a combination of them separated by "_" e.g. TSS_EnhA \t'
+        '     In mice choose from TSS, EnhA_many or EnhA_strong a combination of them separated by "_". \n',
+    )
+    
+    optional_arguments.add_argument(
+        "--normalization_method",
+        type=str,
+        default="Log2RPM",
+        help="Step 1) \n Normalization method to use for the predictions and measurements. \n Default (Log2RPM) \n"
+    )
+    
+
+    ###Arguments for STEP 2
+    optional_arguments.add_argument(
+        "--file_input_mutagenesis_validation",
+        type=str,
+        nargs="+",
+        # default = './example_data/mutagenesis_library/mutagenesis_validation_promoters.txt',
+        default=None,
+        help="Step 2) \n  File of measured mutagenesis assays where the format of the file is, should contain at least the following columns: \n"
+        "   chr	start	end	strand	prom	mut_po	ref	alt	sequence	seq_type	oligo_identifyer	bc	HCT116	HepG2	K562	LNCaP	MCF7\n"
+        "File found in the example data: ./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt \n",
+
+    )
+
+
+    ###Arguments for STEP 3
+    optional_arguments.add_argument(
+        "--PWM_datasets",
+        type=str,
+        nargs="+",
+        default = 'https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt',
+        help="Step 3) \n Files or paths of the PWM datasets in jaspar format to use to study motifs in the model. If several, separate them by a space. \n"
+        "e.g. https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
+    )
+
+    optional_arguments.add_argument(
+        "--batch_size",
+        type=int,
+        default=2000,
+        help="Step 3) \n Number of sequences to compute the attribution at the same time. Relevant when not enough memory. \n Default (2000) \n",
+    )
+
+    optional_arguments.add_argument(
+        "--num_sequences_rnd",
+        type=int,
+        default=100,
+        help="Step 3) \n Number of random sequences to generate for the motif insertion. \n Default (100) \n"
+    )
+
+
+    group.set_defaults(func=evaluation_model)
+
+
+
+
+
+
+
+#####
 def bye_message():
     return (
         "\nAll done!\n"

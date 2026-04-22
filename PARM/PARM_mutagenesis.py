@@ -1780,10 +1780,8 @@ def find_hits_and_make_logo(
 
     ##add selected hits
     hits_to_plot_row1, hits_to_plot_row2 = [], []
-
     for it_rows, motif in hits.iterrows():
-
-        start_motif, end_motif = motif[2], motif[3]
+        start_motif, end_motif = motif['start'], motif['end']
 
         overlap = max(
             0, min(end_motif, previous_end) - max(start_motif, previous_start)
@@ -1807,12 +1805,12 @@ def find_hits_and_make_logo(
 
         if overlap == 0 or (overlap > 0 and previous_overlap > 0):
             relevant_hits_row1[:, start_motif:end_motif] = plotting_known_motifs[
-                motif[0]
+                motif['name_motif']
             ][:, rel_start:rel_end]
             hits_to_plot_row1.append(motif)
         else:
             relevant_hits_row2[:, start_motif:end_motif] = plotting_known_motifs[
-                motif[0]
+                motif['name_motif']
             ][:, rel_start:rel_end]
             hits_to_plot_row2.append(motif)
 
@@ -1853,14 +1851,14 @@ def find_hits_and_make_logo(
 
         for selected_hit in hits_to_plot:
 
-            motif_name = selected_hit[0].split("_")[0]
-            if "-" in selected_hit[0]:
+            motif_name = selected_hit['name_motif'].split("_")[0]
+            if "-" in selected_hit['name_motif']:
                 motif_name = f"{motif_name} -"
 
             rho = np.abs(round(selected_hit.rho, 2))
             text_motif = f"{motif_name} R = {rho}"
 
-            mid_point = int((selected_hit[2] + selected_hit[3]) / 2) - int(
+            mid_point = int((selected_hit['start'] + selected_hit['end']) / 2) - int(
                 len(text_motif) / 2
             )
 

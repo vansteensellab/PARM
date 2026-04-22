@@ -1855,7 +1855,7 @@ def find_hits_and_make_logo(
             if "-" in selected_hit['name_motif']:
                 motif_name = f"{motif_name} -"
 
-            rho = np.abs(round(selected_hit.rho, 2))
+            rho = np.abs(round(selected_hit['rho'], 2))
             text_motif = f"{motif_name} R = {rho}"
 
             mid_point = int((selected_hit['start'] + selected_hit['end']) / 2) - int(

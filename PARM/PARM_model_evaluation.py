@@ -1,4 +1,3 @@
-import enum
 
 
 
@@ -191,7 +190,10 @@ def insert_motifs_in_random_sequences(
                 database_id[cell].append(id_PWM_database.split("/")[-1].split(".")[0])
                 motif_id[cell].append(motif)
 
-        
+    
+    return motif_correlation_across_random_sequences, database_id, motif_id
+
+def plot_motif_correlation(motif_correlation_across_random_sequences, database_id, motif_id, cell_type, model_id, output_directory):    
         ##Also save the correlations in dataframe that contains id of the motif and  the correlation value
 
         for cell in cell_type.split("__"):
@@ -215,7 +217,6 @@ def insert_motifs_in_random_sequences(
                 index=False,
                 sep="\t",
             )
-
             # Now plot the distribution of correlations
             fig, ax = plt.subplots(1, 1, figsize=(8, 8))
             #If database is only one, dont use hue, otherwise use hue to separate the databases
@@ -257,16 +258,15 @@ def insert_motifs_in_random_sequences(
             num_motifs_high_corr = (motif_correlation["correlation"] > 0.5).sum()
             #compute average correlation of the motifs with correlation higher than 0.5
             avg_corr_high_corr = motif_correlation[motif_correlation["correlation"] > 0.5]["correlation"].mean()
-            ax.set_title(f"Model: {model_id}\n Cell type {cell}\n Motifs with corr. > 0.5: {num_motifs_high_corr} out of {len(motif_correlation)} with avg. corr.: {avg_corr_high_corr:.2f}")
-            
+            percentatge = num_motifs_high_corr / len(motif_correlation) * 100
+            ax.set_title(f"Model: {model_id}\n Cell type {cell}\n Motifs with corr. > 0.5: {num_motifs_high_corr} out of {len(motif_correlation)} ({percentatge:.2f}%) with avg. corr.: {avg_corr_high_corr:.2f}")
+
             if output_directory:
                 plt.savefig(
                      os.path.join(output_directory,
                       f"3analysis_hist_motif_correlation_cell_{cell}.png"),
                      bbox_inches="tight",
                 )
-            
-
             #Check the correlation between the forward and reverse motif (so that is, the same motif name but one with - at the end) and plot it in a scatter plot
             motif_correlation["motif_id_no_rev"] = motif_correlation["motif_id"].apply(lambda x: x.replace("-", ""))
             motif_correlation["is_rev"] = motif_correlation["motif_id"].apply(lambda x: "-" in x)
@@ -521,7 +521,7 @@ def PARM_eval_model(model_dir,
             consensus_PWM_datasets[PWM_dataset] = consensus_dict
             ICT_PWM_datasets[PWM_dataset] = ICT_dict
 
-        insert_motifs_in_random_sequences(
+        motif_correlation_across_random_sequences, database_id, motif_id = insert_motifs_in_random_sequences(
             models,
             L_max,
             consensus_PWM_datasets,
@@ -533,6 +533,11 @@ def PARM_eval_model(model_dir,
             random_sequences=False,
             output_directory=output_directory,
         )
+
+        #Now plot the correlation between the known motifs and the attribution of the consensus sequence and save the dataframe with the correlation values
+        plot_motif_correlation(motif_correlation_across_random_sequences, database_id, motif_id, cell_type, model_id, output_directory)
+
+
 
         print(
             f" Done \n --------------------------------------------------------------------------------------------------------\n\n",

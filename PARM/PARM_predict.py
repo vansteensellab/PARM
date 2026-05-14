@@ -172,188 +172,198 @@ def get_test_fold_predictions(
 
     log(f"Loading test fold data from {test_fold_path}")
 
-    # Load HDF5 file directly
-    with h5py.File(test_fold_path, "r") as f:
-        if features_fragments_selection is not False:
-            dict_features_int = {
-                "TSS": 0,
-                "EnhA": 1,
-                "peaks": 2,
-                "EnhAmany": 3,
-                "EnhAstrong": 4,
-                "others": 99,
-            }
+    #Split in cell
 
-            # Workaround: allow selecting both TSS and EnhA fragments together.
-            if features_fragments_selection == "TSS_EnhA":
-                selected_feature_types = np.array([0, 1])
-            else:
-                if features_fragments_selection not in dict_features_int:
-                    valid = list(dict_features_int.keys()) + ["TSS_EnhA"]
-                    raise ValueError(
-                        f"Unknown features_fragments_selection '{features_fragments_selection}'. "
-                        f"Expected one of: {valid}."
+    for i_cell, cell in enumerate(cell_type.split("__")):
+
+        # Load HDF5 file directly
+        with h5py.File(test_fold_path, "r") as f:
+            if features_fragments_selection is not False:
+                dict_features_int = {
+                    "TSS": 0,
+                    "EnhA": 1,
+                    "peaks": 2,
+                    "EnhAmany": 3,
+                    "EnhAstrong": 4,
+                    "others": 99,
+                }
+
+                # Workaround: allow selecting both TSS and EnhA fragments together.
+                if features_fragments_selection == "TSS_EnhA":
+                    selected_feature_types = np.array([0, 1])
+                else:
+                    if features_fragments_selection not in dict_features_int:
+                        valid = list(dict_features_int.keys()) + ["TSS_EnhA"]
+                        raise ValueError(
+                            f"Unknown features_fragments_selection '{features_fragments_selection}'. "
+                            f"Expected one of: {valid}."
+                        )
+                    selected_feature_types = np.array(
+                        [dict_features_int[features_fragments_selection]]
                     )
-                selected_feature_types = np.array(
-                    [dict_features_int[features_fragments_selection]]
-                )
 
-            feature_index = np.array(f["FEAT"]["FEATtype"][:])
-            index = np.arange(len(feature_index))
-            index = index[np.isin(feature_index, selected_feature_types)]
-        
+                feature_index = np.array(f["FEAT"]["FEATtype"][:])
+                index = np.arange(len(feature_index))
+                index = index[np.isin(feature_index, selected_feature_types)]
             
-        # Load sequences (one-hot encoded)
-        sequences = f["X"]["sequence"]["OneHotEncoding"][:]
-        if features_fragments_selection is not False: sequences = sequences[index]
-        # Load measured values
-        measured = f["Y"][f"{normalization_method}_{cell_type}"][:]
-        if features_fragments_selection is not False: measured = measured[index]
-        # Load the feature names of each fragment
-        try: 
-            feature_names = np.array(f["FEAT"]["FEATname"][:].astype(str))
-            if features_fragments_selection is not False: feature_names = feature_names[index]
                 
-        except: 
-            feat_type = f["FEAT/FEATtype"][:].astype(str)
-            feat_start = f["FEAT/FEATstart"][:].astype(str)
-            feat_end = f["FEAT/FEATend"][:].astype(str)
-            feature_names = np.array([
-                f"{t}_{s}_{e}"
-                for t, s, e in zip(feat_type, feat_start, feat_end)
-            ])
-            if features_fragments_selection is not False: feature_names = feature_names[index]
+            # Load sequences (one-hot encoded)
+            sequences = f["X"]["sequence"]["OneHotEncoding"][:]
+            if features_fragments_selection is not False: sequences = sequences[index]
+            # Load measured values
+            measured = f["Y"][f"{normalization_method}_{cell}"][:]
+            if features_fragments_selection is not False: measured = measured[index]
+            # Load the feature names of each fragment
+            try: 
+                feature_names = np.array(f["FEAT"]["FEATname"][:].astype(str))
+                if features_fragments_selection is not False: feature_names = feature_names[index]
+                    
+            except: 
+                feat_type = f["FEAT/FEATtype"][:].astype(str)
+                feat_start = f["FEAT/FEATstart"][:].astype(str)
+                feat_end = f["FEAT/FEATend"][:].astype(str)
+                feature_names = np.array([
+                    f"{t}_{s}_{e}"
+                    for t, s, e in zip(feat_type, feat_start, feat_end)
+                ])
+                if features_fragments_selection is not False: feature_names = feature_names[index]
 
-    log(f"Loaded {len(sequences)} test fragments")
+        log(f"Loaded {len(sequences)} test fragments")
 
-    # Make predictions with each model
-    all_predictions = []
-    batch_size = 32
-    for i, model in enumerate(list_of_models):
-        log(f"Making predictions with model fold {i}")
-        model.eval()
-        predictions = []
+        # Make predictions with each model
+        all_predictions = []
+        batch_size = 32
+        for i, model in enumerate(list_of_models):
+            log(f"Making predictions with model fold {i}")
+            model.eval()
+            predictions = []
 
-        with torch.no_grad():
-            for start_idx in range(0, len(sequences), batch_size):
-                end_idx = min(start_idx + batch_size, len(sequences))
-                batch_sequences = sequences[start_idx:end_idx]
+            with torch.no_grad():
+                for start_idx in range(0, len(sequences), batch_size):
+                    end_idx = min(start_idx + batch_size, len(sequences))
+                    batch_sequences = sequences[start_idx:end_idx]
 
-                # Convert to tensor and move to GPU if available
-                X = torch.tensor(batch_sequences, dtype=torch.float32).permute(0, 2, 1)
-                if torch.cuda.is_available():
-                    X = X.cuda()
-                    model = model.cuda()
+                    # Convert to tensor and move to GPU if available
+                    X = torch.tensor(batch_sequences, dtype=torch.float32).permute(0, 2, 1)
+                    if torch.cuda.is_available():
+                        X = X.cuda()
+                        model = model.cuda()
 
-                # Make predictions
-                pred = model(X).cpu().detach().numpy()
-                predictions.append(pred)
+                    # Make predictions
+                    pred = model(X).cpu().detach().numpy()
+                    predictions.append(pred)
 
-        # Concatenate all batch predictions
-        model_predictions = np.concatenate(predictions, axis=0)
-        all_predictions.append(model_predictions)
+            # Concatenate all batch predictions
+            model_predictions = np.concatenate(predictions, axis=0)
+            all_predictions.append(model_predictions)
 
-    # Average predictions across all models
-    avg_predictions = np.mean(all_predictions, axis=0).flatten()
-    measured_flat = measured.flatten()
+        # Average predictions across all models
+        avg_predictions = np.mean(all_predictions, axis=0)
 
-    # Now, make a dataframe with the predictions and measured values, and the feature names
-    results_df = pd.DataFrame(
-        {
-            f"measured_{normalization_method}": measured_flat,
-            f"predicted_{normalization_method}": avg_predictions,
-            "feature": feature_names,
-        }
-    )
+        if '__' in cell_type:
+            avg_predictions = avg_predictions[i_cell,:]
+        
+        avg_predictions = avg_predictions.flatten()
+        
+        measured_flat = measured.flatten()
 
-    # Calculate correlation
-    pearson_r, _ = pearsonr(measured_flat, avg_predictions)
+        # Now, make a dataframe with the predictions and measured values, and the feature names
+        results_df = pd.DataFrame(
+            {
+                f"measured_{normalization_method}": measured_flat,
+                f"predicted_{normalization_method}": avg_predictions,
+                "feature": feature_names,
+            }
+        )
 
-    log(f"Pearson correlation (fragment level): {pearson_r:.3f}")
+        # Calculate correlation
+        pearson_r, _ = pearsonr(measured_flat, avg_predictions)
 
-    # Create scatter plot
-    fig, ax = plt.subplots(figsize=(8, 7))
+        log(f"Pearson correlation (fragment level): {pearson_r:.3f}")
 
-    h = ax.hist2d(
-        avg_predictions, measured_flat, bins=100, norm=colors.LogNorm(), cmap="viridis"
-    )
+        # Create scatter plot
+        fig, ax = plt.subplots(figsize=(8, 7))
 
-    # Add correlation annotation
-    ax.annotate(
-        f"R = {pearson_r:.3f}",
-        xy=(0.05, 0.95),
-        xycoords="axes fraction",
-        fontsize=12,
-        verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
-    )
+        h = ax.hist2d(
+            avg_predictions, measured_flat, bins=100, norm=colors.LogNorm(), cmap="viridis"
+        )
 
-    # Add diagonal line
-    min_val = min(avg_predictions.min(), measured_flat.min())
-    max_val = max(avg_predictions.max(), measured_flat.max())
-    ax.plot([min_val, max_val], [min_val, max_val], "r--", alpha=0.8, linewidth=2)
+        # Add correlation annotation
+        ax.annotate(
+            f"R = {pearson_r:.3f}",
+            xy=(0.05, 0.95),
+            xycoords="axes fraction",
+            fontsize=12,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+        )
 
-    ax.set_xlabel("Predicted Log2RPM", fontsize=12)
-    ax.set_ylabel("Measured Log2RPM", fontsize=12)
-    ax.set_title(f"Test Fold Results - {cell_type}", fontsize=14)
+        # Add diagonal line
+        min_val = min(avg_predictions.min(), measured_flat.min())
+        max_val = max(avg_predictions.max(), measured_flat.max())
+        ax.plot([min_val, max_val], [min_val, max_val], "r--", alpha=0.8, linewidth=2)
 
-    plt.colorbar(h[3], ax=ax, label="Fragment count")
+        ax.set_xlabel("Predicted Log2RPM", fontsize=12)
+        ax.set_ylabel("Measured Log2RPM", fontsize=12)
+        ax.set_title(f"Test Fold Results - {cell}", fontsize=14)
 
-    # Save plot
-    plot_path = os.path.join(
-        output_directory, f"test_fold_scatter_{cell_type}_fragment_level.svg"
-    )
-    plt.savefig(plot_path, dpi=300, bbox_inches="tight")
-    plt.close()
+        plt.colorbar(h[3], ax=ax, label="Fragment count")
 
-    results_path = os.path.join(
-        output_directory, f"test_fold_predictions_{cell_type}.tsv"
-    )
-    results_df.to_csv(results_path, sep="\t", index=False)
+        # Save plot
+        plot_path = os.path.join(
+            output_directory, f"test_fold_scatter_{cell}_fragment_level.svg"
+        )
+        plt.savefig(plot_path, dpi=300, bbox_inches="tight")
+        plt.close()
 
-    # Now, group prediction by feature and plot the measured vs. predicted values
-    grouped_results = (
-        results_df.groupby("feature")
-        .agg({f"measured_{normalization_method}": "mean", f"predicted_{normalization_method}": "mean"})
-        .reset_index()
-    )
+        results_path = os.path.join(
+            output_directory, f"test_fold_predictions_{cell}.tsv"
+        )
+        results_df.to_csv(results_path, sep="\t", index=False)
 
-    # plot the grouped results
-    fig, ax = plt.subplots(figsize=(8, 7))
-    h = ax.hist2d(
-        grouped_results[f"predicted_{normalization_method}"],
-        grouped_results[f"measured_{normalization_method}"],
-        bins=100,
-        norm=colors.LogNorm(),
-        cmap="viridis",
-    )
-    # Add correlation annotation
-    pearson_r_grouped, _ = pearsonr(
-        grouped_results[f"measured_{normalization_method}"], grouped_results[f"predicted_{normalization_method}"]
-    )
-    
-    log(f"Pearson correlation (feature level): {pearson_r_grouped:.3f}")
-    
-    ax.annotate(
-        f"R = {pearson_r_grouped:.3f}",
-        xy=(0.05, 0.95),
-        xycoords="axes fraction",
-        fontsize=12,
-        verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
-    )
-    # Add diagonal line
-    ax.plot([min_val, max_val], [min_val, max_val], "r--", alpha=0.8, linewidth=2)
-    ax.set_xlabel(f"Predicted {normalization_method}", fontsize=12)
-    ax.set_ylabel(f"Measured {normalization_method}", fontsize=12)
-    ax.set_title(f"Test Fold Results - {cell_type} (Grouped by Feature)", fontsize=14)
-    plt.colorbar(h[3], ax=ax, label="Feature count")
-    # Save plot
-    plot_grouped_path = os.path.join(
-        output_directory, f"test_fold_scatter_{cell_type}_feature_level.svg"
-    )
-    plt.savefig(plot_grouped_path, dpi=300, bbox_inches="tight")
-    plt.close()
+        # Now, group prediction by feature and plot the measured vs. predicted values
+        grouped_results = (
+            results_df.groupby("feature")
+            .agg({f"measured_{normalization_method}": "mean", f"predicted_{normalization_method}": "mean"})
+            .reset_index()
+        )
+
+        # plot the grouped results
+        fig, ax = plt.subplots(figsize=(8, 7))
+        h = ax.hist2d(
+            grouped_results[f"predicted_{normalization_method}"],
+            grouped_results[f"measured_{normalization_method}"],
+            bins=100,
+            norm=colors.LogNorm(),
+            cmap="viridis",
+        )
+        # Add correlation annotation
+        pearson_r_grouped, _ = pearsonr(
+            grouped_results[f"measured_{normalization_method}"], grouped_results[f"predicted_{normalization_method}"]
+        )
+        
+        log(f"Pearson correlation (feature level): {pearson_r_grouped:.3f}")
+        
+        ax.annotate(
+            f"R = {pearson_r_grouped:.3f}",
+            xy=(0.05, 0.95),
+            xycoords="axes fraction",
+            fontsize=12,
+            verticalalignment="top",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+        )
+        # Add diagonal line
+        ax.plot([min_val, max_val], [min_val, max_val], "r--", alpha=0.8, linewidth=2)
+        ax.set_xlabel(f"Predicted {normalization_method}", fontsize=12)
+        ax.set_ylabel(f"Measured {normalization_method}", fontsize=12)
+        ax.set_title(f"Test Fold Results - {cell} (Grouped by Feature)", fontsize=14)
+        plt.colorbar(h[3], ax=ax, label="Feature count")
+        # Save plot
+        plot_grouped_path = os.path.join(
+            output_directory, f"test_fold_scatter_{cell}_feature_level.svg"
+        )
+        plt.savefig(plot_grouped_path, dpi=300, bbox_inches="tight")
+        plt.close()
 
 
 def get_prediction(sequence, complete_model, L_max=600):

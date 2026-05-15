@@ -326,16 +326,18 @@ def run_predictions_validation_mutagenesis(promoters, models, batch_size, L_max,
         from .PARM_predict import get_prediction
 
 
-        promoters = pd.read_csv(promoters, sep='\t')
+        promoters_pred = pd.read_csv(promoters, sep='\t')
         
         
         #If model is not a list, make it a list
         if type(models) != list: models = [models]
 
         #Split promoters in batches of batch_size to compute the predictions
-        batch_promoters = [promoters[i:i + batch_size] for i in range(0, len(promoters), batch_size)]
+        batch_promoters = [promoters_pred[i:i + batch_size] for i in range(0, len(promoters_pred), batch_size)]
 
         for i_cell, cell in enumerate(cell_type.split("__")):
+            promoters_pred = pd.read_csv(promoters, sep='\t')
+            
 
             for it_batch, batch in enumerate(batch_promoters):
                 #print(f"           Computing mutation effect for batch {it_batch + 1} / {len(batch_promoters)}", flush=True)
@@ -348,28 +350,31 @@ def run_predictions_validation_mutagenesis(promoters, models, batch_size, L_max,
                         pred_mean.append(model_pred)
                 
                 pred = np.mean(pred_mean, axis=0)
-                promoters.loc[batch.index, 'pred'] = pred
+                promoters_pred.loc[batch.index, 'pred'] = pred
             
             
             if output_directory is not False: 
-                promoters.to_csv(os.path.join(output_directory, "2analysis_predictions_mutagenesis_validation_promoters.txt"), sep='\t', index=False)  
+                promoters_pred.to_csv(os.path.join(output_directory, f"2analysis_predictions_mutagenesis_validation_promoters_{cell}.txt"), sep='\t', index=False)  
                 
             
             #Now make the correlations between the predictions and the measurements for each promoter and cell line and save them in a txt file and make heatmaps of the correlations for each cell line and promoter
             cells = ['HCT116', 'HepG2', 'K562', 'MCF7', 'LNCaP']
             #Make from wide to long format the columns of the cells now are a single column with the name of the cell and the values are in a column with the name of the mutation score
-            promoters = promoters.melt(id_vars=['chr', 'start', 'end', 'strand', 'prom', 'mut_po', 'ref', 'alt', 'sequence', 'seq_type', 'oligo_identifyer', 'bc', 'pred'],
+            promoters_pred = promoters_pred.melt(id_vars=['chr', 'start', 'end', 'strand', 'prom', 'mut_po', 'ref', 'alt', 'sequence', 'seq_type', 'oligo_identifyer', 'bc', 'pred'],
                                     value_vars=cells,
                                     var_name='cell',
                                     value_name='measurement')
             
 
             #Now group by cell and promoter and compute the correlation between the predictions and the measurements for each group
-            correlations = promoters.groupby(['cell', 'prom']).apply(lambda x: scipy.stats.pearsonr(x['pred'], x['measurement'])[0])
+            correlations = promoters_pred.groupby(['cell', 'prom']).apply(lambda x: scipy.stats.pearsonr(x['pred'], x['measurement'])[0])
             correlations = correlations.reset_index()
             correlations.columns = ['cell', 'promoter', 'correlation']
             #Now make a heatmap of the correlations for each cell line and promoter all together, the x axis will be the cell line and the y axis will be the promoter, the color will be the correlation value
             heatmap_data = correlations.pivot(index='promoter', columns='cell', values='correlation')
+
+            #Save the heatmap data in a txt file
+            heatmap_data.to_csv(os.path.join(output_directory, f"2analysis_heatmap_correlation_predictions_measurements_mutagenesis_validation_library_{cell}.txt"), sep='\t')
 
             plt.figure(figsize=(10, 10))
             #add legend

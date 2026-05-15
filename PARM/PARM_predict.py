@@ -261,7 +261,7 @@ def get_test_fold_predictions(
         avg_predictions = np.mean(all_predictions, axis=0)
 
         if '__' in cell_type:
-            avg_predictions = avg_predictions[i_cell,:]
+            avg_predictions = avg_predictions[:,i_cell]
         
         avg_predictions = avg_predictions.flatten()
         

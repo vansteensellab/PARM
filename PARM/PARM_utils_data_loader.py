@@ -216,7 +216,7 @@ class pad_collate():
         return [xx, yy]
 
 
-def index_of_interest(data_length:int, file_path: str, stranded: bool, features: str
+def index_of_interest(data_length:int, file_path: str, features: str, stranded: bool = False,
                         ):
     """
 
@@ -238,7 +238,13 @@ def index_of_interest(data_length:int, file_path: str, stranded: bool, features:
 
     """
 
-    dict_features_int = {'TSS' :0 , 'EnhA' : 1 , 'peaks' : 2, 'EnhAmany' : 3, 'EnhAstrong' : 4, 'others':99}
+    dict_features_int = {'TSS' :0 , 
+                         'EnhA' : 1 , 
+                         'peaks' : 2, 
+                         'EnhAmany' : 3, 
+                         'EnhAstrong' : 4, 
+                         'MichielEnhA' : 5,
+                         'others':99}
 
     index = np.arange(data_length)
     size_file = len(index)

@@ -410,7 +410,8 @@ def PARM_eval_model(model_dir,
                     batch_size,
                     num_sequences_rnd,
                     normalization_method="Log2RPM",
-                    filter_size=125
+                    filter_size=125,
+                    n_conv_blocks=5
                     ):
     """
     """
@@ -446,6 +447,7 @@ def PARM_eval_model(model_dir,
                 train=False,
                 type_loss = criterion,
                 filter_size=filter_size,
+                n_block = n_conv_blocks,
             ))
 
     print(

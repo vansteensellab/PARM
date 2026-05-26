@@ -196,6 +196,10 @@ def insert_motifs_in_random_sequences(
 def plot_motif_correlation(motif_correlation_across_random_sequences, database_id, motif_id, cell_type, model_id, output_directory):    
         ##Also save the correlations in dataframe that contains id of the motif and  the correlation value
         import pandas as pd
+        import os
+        import numpy as np
+        import matplotlib.pyplot as plt
+        import seaborn as sns
         
         for cell in cell_type.split("__"):
             motif_id_cell = motif_id[cell]
@@ -406,7 +410,8 @@ def PARM_eval_model(model_dir,
                     batch_size,
                     num_sequences_rnd,
                     normalization_method="Log2RPM",
-                    filter_size=125
+                    filter_size=125,
+                    n_conv_blocks=5
                     ):
     """
     """
@@ -442,6 +447,7 @@ def PARM_eval_model(model_dir,
                 train=False,
                 type_loss = criterion,
                 filter_size=filter_size,
+                n_block = n_conv_blocks,
             ))
 
     print(

@@ -185,6 +185,7 @@ def get_test_fold_predictions(
                     "peaks": 2,
                     "EnhAmany": 3,
                     "EnhAstrong": 4,
+                    "MichielEnhA": 5,
                     "others": 99,
                 }
 

@@ -16,6 +16,7 @@ from .PARM_utils_data_loader import (
     shuffle_batch_sampler,
     h5_dataset,
     gradual_warmup_scheduler,
+    index_of_interest,
 )
 from tqdm import tqdm
 from .PARM_misc import log
@@ -268,7 +269,7 @@ def objective(
 
     if scheduler:
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, total_steps, eta_min=0, last_epoch=-1, verbose=False
+            optimizer, total_steps, eta_min=0, last_epoch=-1,
         )
 
     if warmup:

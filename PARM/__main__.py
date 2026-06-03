@@ -236,6 +236,7 @@ def evaluation_model(args):
     print_arguments("Number of random sequences to generate for motif insertion", args.num_sequences_rnd)
     print_arguments("Normalization method to use for the predictions and measurements", args.normalization_method)
     print_arguments("Filter size of the model", args.filter_size)
+    print_arguments("Number of convolution blocks of the model", args.n_blocks)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_eval_model(
@@ -252,6 +253,7 @@ def evaluation_model(args):
         num_sequences_rnd=args.num_sequences_rnd,
         normalization_method=args.normalization_method,
         filter_size=args.filter_size,
+        n_conv_blocks=args.n_blocks
     )
 
 
@@ -767,6 +769,13 @@ def evaluation_model_subparser(subparsers):
         default=125,
         type=int,
         help="General argument. \n Number of filters in convolution layers (default: 125) \n",
+    )
+    
+    optional_arguments.add_argument(
+        "--n_blocks",
+        default=5,
+        type=int,
+        help="General argument. \n Number of convolution blocks of the model (default: 5) \n",
     )
 
     # Arguments for the input files

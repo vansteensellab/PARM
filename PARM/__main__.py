@@ -237,6 +237,7 @@ def evaluation_model(args):
     print_arguments("Normalization method to use for the predictions and measurements", args.normalization_method)
     print_arguments("Filter size of the model", args.filter_size)
     print_arguments("Number of convolution blocks of the model", args.n_blocks)
+    print_arguments("File of SNPs in SuRE format to compute the SNP effects", args.file_SNP_SuRE)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_eval_model(
@@ -253,7 +254,8 @@ def evaluation_model(args):
         num_sequences_rnd=args.num_sequences_rnd,
         normalization_method=args.normalization_method,
         filter_size=args.filter_size,
-        n_conv_blocks=args.n_blocks
+        n_conv_blocks=args.n_blocks,
+        file_SNP_SuRE=args.file_SNP_SuRE
     )
 
 
@@ -832,16 +834,16 @@ def evaluation_model_subparser(subparsers):
         "--PWM_datasets",
         type=str,
         nargs="+",
-        default = 'https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt',
+        default = False,
         help="Step 3) \n Files or paths of the PWM datasets in jaspar format to use to study motifs in the model. If several, separate them by a space. \n"
-        "e.g. https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
+        "e.g. https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt. (default: False, if not provided, motif analysis will not be performed. If you want to use the HOCOMOCOv11 database, you can set it as https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt \n",
     )
 
     optional_arguments.add_argument(
         "--batch_size",
         type=int,
         default=2000,
-        help="Step 3) \n Number of sequences to compute the attribution at the same time. Relevant when not enough memory. \n Default (2000) \n",
+        help="Step 3 and 4) \n Number of sequences to compute the attribution at the same time. Relevant when not enough memory. \n Default (2000) \n",
     )
 
     optional_arguments.add_argument(

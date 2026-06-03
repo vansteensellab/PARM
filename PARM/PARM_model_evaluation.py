@@ -144,23 +144,35 @@ def predict_on_SuRE_SNP(models,
         L_max,
         file_SuRE_SNP,
         cell_type,
+        batch_size=200,
         output_directory=False):
     
     import pandas as pd
+    import os
+    import seaborn as sns
     import numpy as np
     from .PARM_predict import get_prediction
 
     df_SuRE_SNP = pd.read_csv(file_SuRE_SNP, sep='\t')
 
+    file_id = os.path.basename(file_SuRE_SNP).split(".")[0]
+
 
     for i_cell, cell in enumerate(cell_type.split("__")):
         #Predict the seq_ref and seq_alt column
         for model in models:
-            pred_ref = get_prediction(df_SuRE_SNP['seq_ref'].tolist(), model, L_max=L_max)[:, i_cell]
-            pred_alt = get_prediction(df_SuRE_SNP['seq_alt'].tolist(), model, L_max=L_max)[:, i_cell]
+            pred_ref = []
+            pred_alt = []
+
+            for i in range(0, len(df_SuRE_SNP), batch_size):
+                batch_ref = df_SuRE_SNP['seq_ref'].tolist()[i:i+batch_size]
+                batch_alt = df_SuRE_SNP['seq_alt'].tolist()[i:i+batch_size]
+                pred_ref.extend(get_prediction(batch_ref, model, L_max=L_max)[:, i_cell])
+                pred_alt.extend(get_prediction(batch_alt, model, L_max=L_max)[:, i_cell])
+
             df_SuRE_SNP[f'pred_ref_{model}'] = pred_ref
             df_SuRE_SNP[f'pred_alt_{model}'] = pred_alt
-            df_SuRE_SNP[f'pred_delta_{model}'] = pred_alt - pred_ref
+            df_SuRE_SNP[f'pred_delta_{model}'] = df_SuRE_SNP[f'pred_alt_{model}'] - df_SuRE_SNP[f'pred_ref_{model}']
         
         #Now do the average of the predictions for all models
         df_SuRE_SNP['pred_ref_avg'] = df_SuRE_SNP[[f'pred_ref_{model}' for model in models]].mean(axis=1)
@@ -184,44 +196,50 @@ def predict_on_SuRE_SNP(models,
             col_alt: 'first',
             'ref' : 'first',
             'alt' : 'first',
-            'delta_exp': 'first'
+            'delta_exp': 'first',
+            'FEAT': 'first',
+            'FEATtype': 'first',
         }).reset_index()
 
         #Save the dataframe with the predictions and the experimental delta
-        df_SuRE_SNP.to_csv(os.path.join(output_directory, f"4analysis_SuRE_SNP_predictions_{cell}.txt"), sep='\t', index=False)
+        df_SuRE_SNP.to_csv(os.path.join(output_directory, f"4analysis_SuRE_SNP_predictions_{file_id}_{cell}.txt"), sep='\t', index=False)
 
         #Now make hist2d between pred_delta_avg and delta_exp
         import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        import matplotlib.colors as colors
+
+        fig, ax = plt.subplots(1, 1, figsize=(6, 6))
         ax.hist2d(df_SuRE_SNP['pred_delta_avg'], df_SuRE_SNP['delta_exp'], bins=100, norm=colors.LogNorm(), cmap='YlOrRd_r')
-        sns.regplot(x='pred_delta_avg', y='delta_exp', data=df_SuRE_SNP_FEAT, scatter=False, ax=ax, color='black')
-        ax.set_xlabel('Predicted delta\n(alt - ref)')
-        ax.set_ylabel('Experimental delta\n(alt - ref)')
+        sns.regplot(x='pred_delta_avg', y='delta_exp', data=df_SuRE_SNP, scatter=False, ax=ax, color='black')
+        ax.set_xlabel('Predicted delta (alt - ref)')
+        ax.set_ylabel('Experimental delta (alt - ref)')
         r = np.corrcoef(df_SuRE_SNP['pred_delta_avg'], df_SuRE_SNP['delta_exp'])[0, 1] 
         ax.set_title(f'Correlation between predicted and experimental delta: {r:.2f}')
         if output_directory:
-            plt.savefig(os.path.join(output_directory, f"4analysis_SuRE_SNP_predicted_vs_experimental_delta_{cell}.png"), bbox_inches="tight")
+            plt.savefig(os.path.join(output_directory, f"4analysis_SuRE_SNP_predicted_vs_experimental_delta_{file_id}_{cell}.png"), bbox_inches="tight")
         else:
             plt.show()
         
         #Check if FEAT column is in the dataframe, if it is, make a hist2d
         if 'FEATtype' in df_SuRE_SNP.columns:
             for feat in df_SuRE_SNP['FEATtype'].unique():
-                df_SuRE_SNP_FEAT = df_SuRE_SNP[df_SuRE_SNP['FEATTtype'] == feat]
+                df_SuRE_SNP_FEAT = df_SuRE_SNP[df_SuRE_SNP['FEATtype'] == feat]
                 #If more than two rows, make the plot
                 if len(df_SuRE_SNP_FEAT) < 2:
                     continue
-                fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+                fig, ax = plt.subplots(1, 1, figsize=(6, 6))
                 ax.hist2d(df_SuRE_SNP_FEAT['pred_delta_avg'], df_SuRE_SNP_FEAT['delta_exp'], bins=100, norm=colors.LogNorm(), cmap='YlOrRd_r')
                 sns.regplot(x='pred_delta_avg', y='delta_exp', data=df_SuRE_SNP_FEAT, scatter=False, ax=ax, color='black')
-                ax.set_xlabel('Predicted delta\n(alt - ref)')
-                ax.set_ylabel('Experimental delta\n(alt - ref)')
+                ax.set_xlabel('Predicted delta (alt - ref)')
+                ax.set_ylabel('Experimental delta (alt - ref)')
                 r = np.corrcoef(df_SuRE_SNP_FEAT['pred_delta_avg'], df_SuRE_SNP_FEAT['delta_exp'])[0, 1]
                 ax.set_title(f'{feat} \n r= {r:.2f}')
                 if output_directory:
-                    plt.savefig(os.path.join(output_directory, f"4analysis_SuRE_SNP_predicted_vs_experimental_delta_{feat}_{cell}.png"), bbox_inches="tight")
+                    plt.savefig(os.path.join(output_directory, f"4analysis_SuRE_SNP_predicted_vs_experimental_delta_{file_id}_{feat}_{cell}.png"), bbox_inches="tight")
                 else:
                     plt.show()
+                
+                df_SuRE_SNP_FEAT.to_csv(os.path.join(output_directory, f"4analysis_SuRE_SNP_predictions_{file_id}_{feat}_{cell}.txt"), sep='\t', index=False)
 
 
 
@@ -799,7 +817,7 @@ def PARM_eval_model(model_dir,
         if not os.path.exists(file_SNP_SuRE):
             print(f"           File {file_SNP_SuRE} does not exist, skipping\n", flush=True)
         else:
-            predict_on_SuRE_SNP(models=models, L_max=L_max, file_SuRE_SNP=file_SNP_SuRE, i_cell=cell_type, output_directory=output_directory)
+            predict_on_SuRE_SNP(models=models, L_max=L_max, file_SuRE_SNP=file_SNP_SuRE, cell_type=cell_type, output_directory=output_directory, batch_size=batch_size)
 
         print(
             f" Done \n --------------------------------------------------------------------------------------------------------\n\n",

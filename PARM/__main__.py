@@ -842,6 +842,17 @@ def evaluation_model_subparser(subparsers):
         help="Step 3) \n Number of random sequences to generate for the motif insertion. \n Default (100) \n"
     )
 
+    ##Argument for STEP 4
+
+    optional_arguments.add_argument(
+        "--file_SNP_SuRE",
+        type=str,
+        default=False,
+        help="Step 4) \n File containing the SNPs in SuRE SNP format. \n"
+        "File found in the example data in the github: example_data/eval_values/4_SNP_deltas_SuRE4n/hepg2.sign.id.LP190708_sequences.txt for HepG2 \n"
+        "or example_data/eval_values/4_SNP_deltas_SuRE4n/k562.sign.id.LP190708_sequences.txt for K562 \n"
+    )
+
 
     group.set_defaults(func=evaluation_model)
 

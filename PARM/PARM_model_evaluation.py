@@ -1,3 +1,229 @@
+import colorsys
+
+
+
+def compute_SNPs_interest_SuRE(INPUT_FILE, OUTPUT_FILE):
+    import pandas as pd
+    import numpy as np
+    import pyranges as pr
+    import sys, os, time
+    
+    t0 = time.time()
+    
+    
+    # ── 1. Load full dataframe ───────────────────────────────────────────────────
+    print("Loading dataframe...", flush=True)
+    df = pd.read_csv(INPUT_FILE, sep='\t', low_memory=False,
+                    engine='c')          # c engine is fastest for plain TSV/gz
+    df['_row_idx'] = np.arange(len(df))  # stable row id for the join
+    print(f"  {len(df):,} rows loaded in {time.time()-t0:.1f}s", flush=True)
+    
+    
+    # ── 2. Explode SNP_ID / SNPabspos ───────────────────────────────────────────
+    print("Exploding SNPs...", flush=True)
+    
+    # Keep only rows that actually have SNP annotation
+    has_snp = df['SNP_ID'].notna() & (df['SNP_ID'] != '.') & (df['SNP_ID'] != '')
+    snp_src = df.loc[has_snp, ['_row_idx', 'chr', 'SNP_ID', 'SNPabspos']].copy()
+    
+    # Split comma-separated fields → lists, then explode
+    snp_src['SNP_ID']     = snp_src['SNP_ID'].str.split(',')
+    snp_src['SNPabspos']  = snp_src['SNPabspos'].str.split(',')
+    snp_src = snp_src.explode(['SNP_ID', 'SNPabspos'])           # pandas ≥1.3
+    snp_src['SNP_ID']    = snp_src['SNP_ID'].str.strip()
+    snp_src['SNPabspos'] = pd.to_numeric(snp_src['SNPabspos'], errors='coerce')
+    snp_src = snp_src.dropna(subset=['SNPabspos'])
+    snp_src['SNPabspos'] = snp_src['SNPabspos'].astype(int)
+    
+    # Deduplicate: same SNP_ID + abspos (may appear on multiple source rows)
+    snp_unique = (snp_src[['SNP_ID', 'chr', 'SNPabspos']]
+                .drop_duplicates()
+                .reset_index(drop=True))
+    print(f"  {len(snp_unique):,} unique (SNP_ID, chr, abspos) combos", flush=True)
+    
+    
+    # ── 3. Build PyRanges objects ────────────────────────────────────────────────
+    print("Building interval index...", flush=True)
+    
+    # Fragment ranges: use _row_idx as the Name so we can re-join later
+    pr_frags = pr.PyRanges(
+        df[['chr', 'start', 'end', '_row_idx']]
+        .rename(columns={'chr': 'Chromosome', 'start': 'Start', 'end': 'End'})
+    )
+    
+    # SNP "ranges": point intervals [abspos, abspos+1)
+    pr_snps = pr.PyRanges(pd.DataFrame({
+        'Chromosome': snp_unique['chr'],
+        'Start':      snp_unique['SNPabspos'],
+        'End':        snp_unique['SNPabspos'] + 1,
+        'SNP_ID':     snp_unique['SNP_ID'],
+        'SNPabspos':  snp_unique['SNPabspos'],
+    }))
+
+
+    # ── 4. Interval join (vectorised, ncls) ─────────────────────────────────────
+    print("Running interval join...", flush=True)
+    t1 = time.time()
+    
+    # join() returns overlapping pairs; suffix _b = SNP columns
+    joined = pr_frags.join(pr_snps, how=None)   # inner join by default
+    joined_df = joined.as_df()
+    print(f"  Join done in {time.time()-t1:.1f}s → {len(joined_df):,} overlap rows",
+        flush=True)
+    
+    
+    # ── 5. Attach full fragment metadata ────────────────────────────────────────
+    print("Merging full metadata...", flush=True)
+    
+    # joined_df has Chromosome/Start/End/_row_idx/SNP_ID/SNPabspos (+ suffixed cols)
+    # Map _row_idx back to all original columns
+    result = (joined_df[['_row_idx', 'SNP_ID', 'SNPabspos']]
+            .merge(df.drop(columns=['_row_idx']), left_on='_row_idx',
+                    right_index=True, how='left', suffixes=('_query', ''))
+            .drop(columns=['_row_idx']))
+    
+    # Put query columns first
+    cols = ['SNP_ID_query', 'SNPabspos_query'] + \
+        [c for c in result.columns if c not in ('SNP_ID_query', 'SNPabspos_query')]
+    result = result[cols]
+
+    # -- 6. Compute the deltas difference
+    SNP_deltas = result[['SNP_ID_query', 'SNPabspos_query', 'chr', 'start', 'end','strand', 'Log2Norm_HEPG2', 'Log2Norm_K562', 'SNP_ID', 'SNPabspos', 'iPCR', 'FEAT']].copy()
+
+    #Add a column that checks if SNP_ID_query and SNPabspos_query is in SNP_ID and SNPabspos (it has to be contained (either coma after or before) and not necessarily equal, 
+    # ## because the SNP_ID_query and SNPabspos_query can be one of the SNP_ID and SNPabspos in the row, but not necessarily all of them, because there can be multiple SNPs in the same row, and we want to check if the SNP_ID_query and SNPabspos_query is in any of the SNP_ID and SNPabspos in the row.
+
+
+
+    # Split comma-separated SNP_ID and SNPabspos into frozensets (fast for 'in' checks)
+    snp_id_sets  = SNP_deltas['SNP_ID'].apply(
+        lambda x: frozenset(s.strip() for s in str(x).split(',')) if pd.notna(x) else frozenset())
+
+    snp_pos_sets = SNP_deltas['SNPabspos'].apply(
+        lambda x: frozenset(s.strip() for s in str(x).split(',')) if pd.notna(x) else frozenset())
+
+
+    # Check if query SNP_ID is in the set AND query abspos is in the set
+    # Element-wise membership: is the query value inside that row's set?
+    SNP_deltas['SNP_match'] = (
+        [q in s for q, s in zip(SNP_deltas['SNP_ID_query'], snp_id_sets)] 
+        and 
+        [q in s for q, s in zip(SNP_deltas['SNPabspos_query'].astype(str), snp_pos_sets)]
+    )
+
+    #Now aggregate per SNP_ID_query and SNP_ID and compute the average and variance and count of the number of rows that are aggregated for each SNP_ID_query and SNP_ID
+
+    
+    SNP_deltas = SNP_deltas.groupby(['SNP_ID_query', 'SNPabspos_query', 'SNP_match']).agg({
+        'Log2Norm_HEPG2': 'mean',
+        'Log2Norm_K562': 'mean',
+        'chr': 'first',
+        'start': 'first',
+        'end': 'first',
+        'strand': 'first',
+        'SNPabspos': 'first',
+        'FEAT': 'first',
+        'iPCR': 'size'  # count of rows in each group
+    }).reset_index()
+    #Rename iPCR to count
+    SNP_deltas = SNP_deltas.rename(columns={'iPCR': 'count'})
+
+    #Now compute the delta within the same SNP_ID_query the difference between SNP_match True and False, so we can see the effect of the SNP on the expression, and we can also compute the variance of the delta across all SNP_ID_query that have both SNP_match True and False, and we can also compute the count of the number of rows that are aggregated for each SNP_ID_query and SNP_ID, so we can see how many rows are used to compute the average and variance for each SNP_ID_query and SNP_ID.
+
+
+    # ── Filter & compute deltas ───────────────────────────────────────────────────
+    SNP_deltas = SNP_deltas[SNP_deltas['count'] >= 10]
+
+        
+    SNP_deltas['delta_HEPG2'] = SNP_deltas.groupby(['SNP_ID_query', 'SNPabspos_query'])['Log2Norm_HEPG2'].diff()
+    SNP_deltas['delta_K562']  = SNP_deltas.groupby(['SNP_ID_query', 'SNPabspos_query'])['Log2Norm_K562'].diff()
+    
+    
+
+def predict_on_SuRE_SNP(models,
+        L_max,
+        file_SuRE_SNP,
+        cell_type,
+        output_directory=False):
+    
+    import pandas as pd
+    import numpy as np
+    from .PARM_predict import get_prediction
+
+    df_SuRE_SNP = pd.read_csv(file_SuRE_SNP, sep='\t')
+
+
+    for i_cell, cell in enumerate(cell_type.split("__")):
+        #Predict the seq_ref and seq_alt column
+        for model in models:
+            pred_ref = get_prediction(df_SuRE_SNP['seq_ref'].tolist(), model, L_max=L_max)[:, i_cell]
+            pred_alt = get_prediction(df_SuRE_SNP['seq_alt'].tolist(), model, L_max=L_max)[:, i_cell]
+            df_SuRE_SNP[f'pred_ref_{model}'] = pred_ref
+            df_SuRE_SNP[f'pred_alt_{model}'] = pred_alt
+            df_SuRE_SNP[f'pred_delta_{model}'] = pred_alt - pred_ref
+        
+        #Now do the average of the predictions for all models
+        df_SuRE_SNP['pred_ref_avg'] = df_SuRE_SNP[[f'pred_ref_{model}' for model in models]].mean(axis=1)
+        df_SuRE_SNP['pred_alt_avg'] = df_SuRE_SNP[[f'pred_alt_{model}' for model in models]].mean(axis=1)
+        df_SuRE_SNP['pred_delta_avg'] = df_SuRE_SNP['pred_alt_avg'] - df_SuRE_SNP['pred_ref_avg']
+
+        #Find the column that contains ref.mean and alt.mean
+        col_ref = [col for col in df_SuRE_SNP.columns if 'ref.mean' in col][0]
+        col_alt = [col for col in df_SuRE_SNP.columns if 'alt.mean' in col][0]
+
+        df_SuRE_SNP['delta_exp'] = df_SuRE_SNP[col_alt] - df_SuRE_SNP[col_ref]
+        
+        #Take the maximum delta between the same SNP_ID and SNPabspos but different strands
+        df_SuRE_SNP = df_SuRE_SNP.groupby(['SNP_ID', 'SNPabspos']).agg({
+            'pred_delta_avg': 'max',
+            'chr': 'first',
+            'start': 'first',
+            'end': 'first',
+            'strand': 'first',
+            col_ref: 'first',
+            col_alt: 'first',
+            'ref' : 'first',
+            'alt' : 'first',
+            'delta_exp': 'first'
+        }).reset_index()
+
+        #Save the dataframe with the predictions and the experimental delta
+        df_SuRE_SNP.to_csv(os.path.join(output_directory, f"4analysis_SuRE_SNP_predictions_{cell}.txt"), sep='\t', index=False)
+
+        #Now make hist2d between pred_delta_avg and delta_exp
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+        ax.hist2d(df_SuRE_SNP['pred_delta_avg'], df_SuRE_SNP['delta_exp'], bins=100, norm=colors.LogNorm(), cmap='YlOrRd_r')
+        sns.regplot(x='pred_delta_avg', y='delta_exp', data=df_SuRE_SNP_FEAT, scatter=False, ax=ax, color='black')
+        ax.set_xlabel('Predicted delta\n(alt - ref)')
+        ax.set_ylabel('Experimental delta\n(alt - ref)')
+        r = np.corrcoef(df_SuRE_SNP['pred_delta_avg'], df_SuRE_SNP['delta_exp'])[0, 1] 
+        ax.set_title(f'Correlation between predicted and experimental delta: {r:.2f}')
+        if output_directory:
+            plt.savefig(os.path.join(output_directory, f"4analysis_SuRE_SNP_predicted_vs_experimental_delta_{cell}.png"), bbox_inches="tight")
+        else:
+            plt.show()
+        
+        #Check if FEAT column is in the dataframe, if it is, make a hist2d
+        if 'FEATtype' in df_SuRE_SNP.columns:
+            for feat in df_SuRE_SNP['FEATtype'].unique():
+                df_SuRE_SNP_FEAT = df_SuRE_SNP[df_SuRE_SNP['FEATTtype'] == feat]
+                #If more than two rows, make the plot
+                if len(df_SuRE_SNP_FEAT) < 2:
+                    continue
+                fig, ax = plt.subplots(1, 1, figsize=(8, 8))
+                ax.hist2d(df_SuRE_SNP_FEAT['pred_delta_avg'], df_SuRE_SNP_FEAT['delta_exp'], bins=100, norm=colors.LogNorm(), cmap='YlOrRd_r')
+                sns.regplot(x='pred_delta_avg', y='delta_exp', data=df_SuRE_SNP_FEAT, scatter=False, ax=ax, color='black')
+                ax.set_xlabel('Predicted delta\n(alt - ref)')
+                ax.set_ylabel('Experimental delta\n(alt - ref)')
+                r = np.corrcoef(df_SuRE_SNP_FEAT['pred_delta_avg'], df_SuRE_SNP_FEAT['delta_exp'])[0, 1]
+                ax.set_title(f'{feat} \n r= {r:.2f}')
+                if output_directory:
+                    plt.savefig(os.path.join(output_directory, f"4analysis_SuRE_SNP_predicted_vs_experimental_delta_{feat}_{cell}.png"), bbox_inches="tight")
+                else:
+                    plt.show()
+
+
 
 
 
@@ -405,6 +631,7 @@ def PARM_eval_model(model_dir,
                     PWM_datasets,
                     batch_size,
                     num_sequences_rnd,
+                    file_SNP_SuRE,
                     normalization_method="Log2RPM",
                     filter_size=125
                     ):
@@ -556,7 +783,22 @@ def PARM_eval_model(model_dir,
             flush=True,
         )
     
+    
 
+    ### 4 . Predict on the SuRE SNP dataset and compare with the experimental measurements, make a hist2d of the predicted delta vs the experimental delta and compute the correlation between them, also make a hist2d for each FEAT type if the FEAT column is in the dataset
+
+    if file_SNP_SuRE:
+        print(f"   Step 4: Predict on the SuRE SNP dataset and compare with the experimental measurements\n", flush=True)
+        #Check that the file exists, otherwise continue
+        if not os.path.exists(file_SNP_SuRE):
+            print(f"           File {file_SNP_SuRE} does not exist, skipping\n", flush=True)
+        else:
+            predict_on_SuRE_SNP(models=models, L_max=L_max, file_SuRE_SNP=file_SNP_SuRE, i_cell=cell_type, output_directory=output_directory)
+
+        print(
+            f" Done \n --------------------------------------------------------------------------------------------------------\n\n",
+            flush=True,
+        )
     #Print where everything is saved
     print(f"   All results are saved in {output_directory} \n\n", flush=True)
 

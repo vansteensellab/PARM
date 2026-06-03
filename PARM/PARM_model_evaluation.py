@@ -155,9 +155,9 @@ def predict_on_SuRE_SNP(models,
 
     df_SuRE_SNP = pd.read_csv(file_SuRE_SNP, sep='\t')
 
-    file_id = os.path.basename(file_SuRE_SNP).split(".")[0]
-
-
+    file_id = os.path.basename(file_SuRE_SNP).split(".")[:-1]
+    file_id = '_'.join(file_id)
+    
     for i_cell, cell in enumerate(cell_type.split("__")):
         #Predict the seq_ref and seq_alt column
         for model in models:

@@ -714,13 +714,14 @@ def evaluation_model_subparser(subparsers):
 
     group = subparsers.add_parser(
         "evaluation_model",
-        help="Evaluation of model. If provided, it can perform three tests: \n"
+        help="Evaluation of model. If provided, it can perform 4 tests: \n"
         "1) Compute predictions of MPRA fragments and compare them with the measured activity \n (if --input_h5py_file is provided) \n"
         "2) Compute mutation effects of the mutagenesis library and compare with measurements (used in the PARM paper Fig 2c-e) \n"
         "        (if --file_input_mutagenesis_validation is provided, it can be found in the repo: ./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt). \n"
         "3) Check whether motifs are detected by the model. \n"
         " In a set of random sequences, we insert each motif from the database individually, compute the ISM, and measure the correlation between the attribution scores and the known motif. \n"
-        " (set in --PWM_datasets HOCOMOCOv11 is used by default.)",
+        " (set in --PWM_datasets HOCOMOCOv11 is used by default.) \n"
+        "4) Compute the predicted effect of SNPs with significant effect in the SuRE4n data (as tested in van Arensbergen et al., 2019) (if --file_SNP_SuRE is provided, it can be found in the repo: ./example_data/SNP_SuRE/SuRE_SNPs_example.txt). \n",
         formatter_class=MyHelpFormatter,
         add_help=False,
         description="R|" + description,
@@ -755,7 +756,7 @@ def evaluation_model_subparser(subparsers):
          type=str, 
          choices=['poisson', 'heteroscedastic'],
             default='poisson',
-            help="Criterion used to train the model, important for architecture. \n"
+            help="General argument. \n Criterion used during training of the model, important for architecture. \n"
     )
 
     optional_arguments.add_argument(
@@ -780,6 +781,12 @@ def evaluation_model_subparser(subparsers):
         help="General argument. \n Number of convolution blocks of the model (default: 5) \n",
     )
 
+    optional_arguments.add_argument(
+        "--cell_type",
+        required=True,
+        help="General argument. Cell line to work with (K562, HEPG2, hNPC, HCT166, MCF7, mESC or any combination of these separated by two underscores (__). Used in the input_h5py_file to select the right files to compute the predictions of the MPRA fragments. \n",
+    )
+
     # Arguments for the input files
 
     ###Arguments for STEP 1
@@ -790,11 +797,7 @@ def evaluation_model_subparser(subparsers):
         help="Step 1) \n Argument necessary for step 1 (Compute predictions of MPRA fragments). \n h5 file path, if several, separate them by a space. \n",
     )
 
-    optional_arguments.add_argument(
-        "--cell_type",
-        required=True,
-        help="Step 1) \n  Cell line to work with (K562, HEPG2, hNPC, HCT166, MCF7, mESC or any combination of these separated by two underscores (__). Used in the input_h5py_file to select the right files to compute the predictions of the MPRA fragments. \n",
-    )
+    
 
     optional_arguments.add_argument(
         "--features_fragments_selection",

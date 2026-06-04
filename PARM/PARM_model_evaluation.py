@@ -185,21 +185,23 @@ def predict_on_SuRE_SNP(models,
 
         df_SuRE_SNP['delta_exp'] = df_SuRE_SNP[col_alt] - df_SuRE_SNP[col_ref]
         
+        def abs_max(x):
+            return x.iloc[x.abs().argmax()]
         #Take the maximum delta between the same SNP_ID and SNPabspos but different strands
-        df_SuRE_SNP = df_SuRE_SNP.groupby(['SNP_ID', 'SNPabspos']).agg({
-            'pred_delta_avg': 'max',
-            'chr': 'first',
-            'start': 'first',
-            'end': 'first',
-            'strand': 'first',
-            col_ref: 'first',
-            col_alt: 'first',
-            'ref' : 'first',
-            'alt' : 'first',
-            'delta_exp': 'first',
-            'FEAT': 'first',
-            'FEATtype': 'first',
-        }).reset_index()
+        df_SuRE_SNP = df_SuRE_SNP.groupby(['SNP_ID', 'SNPabspos']).agg(
+            pred_delta_avg=('pred_delta_avg', abs_max),
+            chr           =('chr',    'first'),
+            start         =('start',  'first'),
+            end           =('end',    'first'),
+            strand        =('strand', 'first'),
+            **{col_ref:   (col_ref,   'first')},
+            **{col_alt:   (col_alt,   'first')},
+            ref           =('ref',    'first'),
+            alt           =('alt',    'first'),
+            delta_exp     =('delta_exp', 'first'),
+            FEAT          =('FEAT',   'first'),
+            FEATtype      =('FEATtype', 'first'),
+        ).reset_index()
 
         #Save the dataframe with the predictions and the experimental delta
         df_SuRE_SNP.to_csv(os.path.join(output_directory, f"4analysis_SuRE_SNP_predictions_{file_id}_{cell}.txt"), sep='\t', index=False)

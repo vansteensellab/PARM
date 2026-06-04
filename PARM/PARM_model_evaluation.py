@@ -210,13 +210,17 @@ def predict_on_SuRE_SNP(models,
         import matplotlib.pyplot as plt
         import matplotlib.colors as colors
 
+        #Compute concordance
+        concordant = np.sign(df_SuRE_SNP['pred_delta_avg']) == np.sign(df_SuRE_SNP['delta_exp'])
+        concordance = concordant.mean()
+
         fig, ax = plt.subplots(1, 1, figsize=(6, 6))
         ax.hist2d(df_SuRE_SNP['pred_delta_avg'], df_SuRE_SNP['delta_exp'], bins=100, norm=colors.LogNorm(), cmap='YlOrRd_r')
         sns.regplot(x='pred_delta_avg', y='delta_exp', data=df_SuRE_SNP, scatter=False, ax=ax, color='black')
         ax.set_xlabel('Predicted delta (alt - ref)')
         ax.set_ylabel('Experimental delta (alt - ref)')
         r = np.corrcoef(df_SuRE_SNP['pred_delta_avg'], df_SuRE_SNP['delta_exp'])[0, 1] 
-        ax.set_title(f'Correlation between predicted and experimental delta: {r:.2f}')
+        ax.set_title(f'Correlation between predicted and experimental delta: {r:.2f} \n Concordance: {concordance:.2f}')
         if output_directory:
             plt.savefig(os.path.join(output_directory, f"4analysis_SuRE_SNP_predicted_vs_experimental_delta_{file_id}_{cell}.png"), bbox_inches="tight")
         else:
@@ -235,7 +239,9 @@ def predict_on_SuRE_SNP(models,
                 ax.set_xlabel('Predicted delta (alt - ref)')
                 ax.set_ylabel('Experimental delta (alt - ref)')
                 r = np.corrcoef(df_SuRE_SNP_FEAT['pred_delta_avg'], df_SuRE_SNP_FEAT['delta_exp'])[0, 1]
-                ax.set_title(f'{feat} \n r= {r:.2f}')
+                concordant = np.sign(df_SuRE_SNP_FEAT['pred_delta_avg']) == np.sign(df_SuRE_SNP_FEAT['delta_exp'])
+                concordance = concordant.mean()
+                ax.set_title(f'{feat} \n r= {r:.2f}, concordance= {concordance:.2f}')
                 if output_directory:
                     plt.savefig(os.path.join(output_directory, f"4analysis_SuRE_SNP_predicted_vs_experimental_delta_{file_id}_{feat}_{cell}.png"), bbox_inches="tight")
                 else:

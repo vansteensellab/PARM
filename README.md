@@ -211,6 +211,106 @@ This will create `my_AGS_model_test` directory containing the scatter plots show
 - Always run the `PARM train` function from a GPU server. A normal CPU machine will take a long time to train a model, even with the provided example data. At the start of the training, PARM will print on the screen if a GPU is detected. Make sure that you see `GPU detected? True`. You can also run `parm train --check_cuda`; this will check if any GPU is detected and exit.
 - Even if your input data contains measurements for more than one cell (as the provided example, which contains data for AGS and HAP1), you can only train a model for one cell at a time.
 
+
+## Inner evaluation for models performances
+Model Evaluation
+
+This module provides a comprehensive evaluation framework for PARM models. Depending on the input files provided, it can perform up to four independent validation analyses that assess model performance across multiple biological tasks.
+
+Evaluation Tasks
+1. MPRA Fragment Prediction
+
+Evaluates how well the model predicts reporter activity for held-out MPRA fragments.
+
+The model generates predictions for sequences contained in one or more HDF5 datasets and compares them against the experimentally measured activities. Performance metrics and diagnostic plots are generated to assess predictive accuracy.
+
+Required argument
+```sh
+--input_h5py_file
+```
+
+Optional arguments
+
+```sh
+--features_fragments_selection
+--normalization_method
+```
+
+2. Mutagenesis Library Validation
+
+Evaluates the model's ability to predict the functional impact of sequence mutations. For each of the ten promoter sequences in a mutagenesis library, the predicted effect of the mutation is compared with experimentally measured changes in activity. This benchmark was used in the PARM manuscript (Figure 2c–e).
+
+Required argument
+
+```sh
+--file_input_mutagenesis_validation
+```
+
+Example file included in the repository:
+```sh
+./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt
+```
+
+3. Motif Detection Benchmark
+
+Evaluates whether the model correctly identifies transcription factor binding motifs.
+
+For each motif in a PWM database:
+
+Random DNA sequences are generated.
+A motif instance is inserted into each sequence.
+Attribution scores are computed using in-silico mutagenesis (ISM).
+The correlation between the attribution profile and the known motif is measured.
+
+Higher correlations indicate that the model has learned to recognise biologically meaningful sequence patterns.
+
+Required argument
+
+--PWM_datasets
+
+Example using the HOCOMOCO v11 motif collection:
+```sh
+https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt
+```
+
+4. SuRE SNP Effect Prediction
+
+Evaluates whether the model can predict the regulatory effects of experimentally validated SNPs.
+
+The model predicts the effect of reference and alternative alleles for SNPs with significant regulatory activity measured in the SuRE dataset from:
+
+van Arensbergen et al., 2019
+
+Predicted SNP effects are compared with experimentally observed expression changes.
+
+Required argument
+
+```sh
+--file_SNP_SuRE
+```
+
+Example files included in the repository:
+```sh
+example_data/eval_values/4_SNP_deltas_SuRE4n/hepg2.sign.id.LP190708_sequences.txt
+example_data/eval_values/4_SNP_deltas_SuRE4n/k562.sign.id.LP190708_sequences.txt
+```
+
+Example Usage
+
+The following command runs all four evaluation benchmarks:
+
+```sh
+parm evaluation_model \
+    --model ./pre_trained_models/K562/K562_fold* \
+    --output_directory ./test/ \
+    --cell_type K562 \
+    --input_h5py_file ./example_data/training_data/test.hdf5 \
+    --features_fragments_selection TSS \
+    --file_input_mutagenesis_validation ./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt \
+    --PWM_datasets https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt \
+    --file_SNP_SuRE ./example_data/eval_values/4_SNP_deltas_SuRE4n/hepg2.sign.id.LP190708_sequences.txt
+```
+
 ---
 
 ## Citation

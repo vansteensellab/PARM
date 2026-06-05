@@ -218,7 +218,8 @@ Model Evaluation
 This module provides a comprehensive evaluation framework for PARM models. Depending on the input files provided, it can perform up to four independent validation analyses that assess model performance across multiple biological tasks.
 
 Evaluation Tasks
-1. MPRA Fragment Prediction
+
+#### 1. MPRA Fragment Prediction
 
 Evaluates how well the model predicts reporter activity for held-out MPRA fragments.
 
@@ -236,7 +237,7 @@ Optional arguments
 --normalization_method
 ```
 
-2. Mutagenesis Library Validation
+#### 2. Mutagenesis Library Validation
 
 Evaluates the model's ability to predict the functional impact of sequence mutations. For each of the ten promoter sequences in a mutagenesis library, the predicted effect of the mutation is compared with experimentally measured changes in activity. This benchmark was used in the PARM manuscript (Figure 2c–e).
 
@@ -251,7 +252,7 @@ Example file included in the repository:
 ./example_data/mutagenesis_library/mutagenesis_validation_promoters.txt
 ```
 
-3. Motif Detection Benchmark
+#### 3. Motif Detection Benchmark
 
 Evaluates whether the model correctly identifies transcription factor binding motifs.
 
@@ -273,7 +274,7 @@ Example using the HOCOMOCO v11 motif collection:
 https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt
 ```
 
-4. SuRE SNP Effect Prediction
+#### 4. SuRE SNP Effect Prediction
 
 Evaluates whether the model can predict the regulatory effects of experimentally validated SNPs.
 

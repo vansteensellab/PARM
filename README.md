@@ -260,10 +260,10 @@ For each motif in a PWM database:
 
 Random DNA sequences are generated.
 A motif instance is inserted into each sequence.
-Attribution scores are computed using in-silico mutagenesis (ISM).
-The correlation between the attribution profile and the known motif is measured.
+Attribution scores are computed using in-silico mutagenesis (ISM) in the region where the motif sequence was inserted.
+The correlation between the attribution profile and the known PFM motif in the database is computed.
 
-Higher correlations indicate that the model has learned to recognise biologically meaningful sequence patterns.
+Higher absolute correlations indicate that the model has learned to recognise biologically meaningful sequence patterns. Negative correlations mean that the model has learned that the motif is generally a repressor.
 
 Required argument
 

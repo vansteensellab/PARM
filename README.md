@@ -212,7 +212,7 @@ This will create `my_AGS_model_test` directory containing the scatter plots show
 - Even if your input data contains measurements for more than one cell (as the provided example, which contains data for AGS and HAP1), you can only train a model for one cell at a time.
 
 
-## Inner evaluation for models performances
+## Internal Evaluation of Model Performance
 Model Evaluation
 
 This module provides a comprehensive evaluation framework for PARM models. Depending on the input files provided, it can perform up to four independent validation analyses that assess model performance across multiple biological tasks.

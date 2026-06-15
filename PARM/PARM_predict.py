@@ -192,6 +192,8 @@ def get_test_fold_predictions(
                 # Workaround: allow selecting both TSS and EnhA fragments together.
                 if features_fragments_selection == "TSS_EnhA":
                     selected_feature_types = np.array([0, 1])
+                elif features_fragments_selection == "TSS_MichielEnhA":
+                    selected_feature_types = np.array([0, 5])
                 else:
                     if features_fragments_selection not in dict_features_int:
                         valid = list(dict_features_int.keys()) + ["TSS_EnhA"]

@@ -1,3 +1,4 @@
+from pip.cmdoptions import ignore_requires_python
 import numpy as np
 import sys
 import os
@@ -148,6 +149,13 @@ def objective(
     ##Define losses
 
     criterion = nn.PoissonNLLLoss(log_input=False)
+
+    def criterion(pred, y, mask=None):
+        poisson = nn.PoissonNLLLoss(log_input=False)
+        if mask:
+            pred = pred.flatten()[mask.flatten()]
+            y = y.flatten()[mask.flatten()]
+        return poisson(pred, y)
 
     ###############################################
     ###Load model
@@ -386,6 +394,7 @@ def train_loop(
     gradient_clipping=False,
     total_iterations=0,
     this_epoch=0,
+    cell_type=False
 ):
     """
     Training loop.
@@ -409,7 +418,11 @@ def train_loop(
 
     model.train()
     training_loss = 0.0
-    y_train_predicted, y_train_true = np.empty((0, 1)), np.empty((0, 1))
+    if cell_type: n_cell_lines = len(cell_type.split("__"))
+    else: n_cell_lines = 1
+
+    y_train_predicted, y_train_true = np.empty((0, n_cell_lines)), np.empty((0, n_cell_lines))
+
     pbar = tqdm(enumerate(train_dataloader), ncols=100, total=total_iterations, file=sys.stdout)
     
     for batch_ndx, (X, y) in pbar:
@@ -418,6 +431,9 @@ def train_loop(
 
         X = X.permute(0, 2, 1)
         y = torch.flatten(y, 1, 2)
+
+        #Check in index, if there are some cell lines for which we dont have info
+        index_info_cell = (~np.isnan(y.numpy()))
 
         if torch.cuda.is_available():
             X = X.cuda()
@@ -436,10 +452,10 @@ def train_loop(
             l2_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
             l1_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
 
-            loss = criterion(pred, y) + l2_norm * betas[1] + l1_norm * betas[0]
+            loss = criterion(pred, y, mask=index_info_cell) + l2_norm * betas[1] + l1_norm * betas[0]
 
         else:
-            loss = criterion(pred, y)
+            loss = criterion(pred, y, mask=index_info_cell)
 
         # Backpropagation
 
@@ -466,15 +482,24 @@ def train_loop(
 
     training_loss /= batch_ndx
 
-    mse = (((y_train_predicted - y_train_true) ** 2) ** (1 / 2)).mean()
-    coeff = r2_score(y_train_true, y_train_predicted)
-    pcc = pearsonr(y_train_true.flatten(), y_train_predicted.flatten())[0]
-    log(f"Training summary")
-    log(f"\t Avg. loss: {training_loss:>8f}")
-    log(f"\t Mean sq. error: {mse:>3f}")
-    log(f"\t R2 coefficient: {coeff:>3f}")
-    log(f"\t Pearson's correlation: {pcc:>3f}")
-    return (y_train_predicted, y_train_true, training_loss)
+    for i_cell in range(n_cell_lines):
+        cell = cell_type.split("__")[i_cell] if cell_type else "cell_line"
+
+        y_train_true_cell = y_train_true[:, i_cell].flatten()
+        #Position of NaN
+        y_train_true_cell_nan = np.isnan(y_train_true_cell)
+        y_train_true_cell = y_train_true_cell[~y_train_true_cell_nan]
+        y_train_predicted_cell = y_train_predicted[:, i_cell].flatten()[~y_train_predicted_cell_nan]
+
+        mse = (((y_train_predicted_cell - y_train_true_cell) ** 2) ** (1 / 2)).mean()
+        coeff = r2_score(y_train_true_cell, y_train_predicted_cell)
+        pcc = pearsonr(y_train_true_cell.flatten(), y_train_predicted_cell.flatten())[0]
+        log(f"Training summary for cell line {i_cell} {cell}")
+        log(f"\t Avg. loss: {training_loss:>8f}")
+        log(f"\t Mean sq. error: {mse:>3f}")
+        log(f"\t R2 coefficient: {coeff:>3f}")
+        log(f"\t Pearson's correlation: {pcc:>3f}")
+
 
 
 def validation_loop(
@@ -500,7 +525,10 @@ def validation_loop(
         valid_loss: (float) Loss performance of epoch.
     """
 
-    y_val_predicted, y_val_real = np.empty((0, 1)), np.empty((0, 1))
+    if cell_type: n_cell_lines = len(cell_type.split("__"))
+    else: n_cell_lines = 1
+
+    y_val_predicted, y_val_real = np.empty((0, n_cell_lines)), np.empty((0, n_cell_lines))
 
     model.eval()
 
@@ -514,6 +542,9 @@ def validation_loop(
 
             X = X.permute(0, 2, 1)
             y = torch.flatten(y, 1, 2)
+
+            #Check in index, if there are some cell lines for which we dont have info
+            index_info_cell = (~np.isnan(y.numpy()))
 
             if torch.cuda.is_available():
                 X = X.cuda()
@@ -533,10 +564,10 @@ def validation_loop(
                 l1_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
 
 
-                loss = criterion(pred, y) + l2_norm * betas[1] + l1_norm * betas[0]
+                loss = criterion(pred, y, mask=index_info_cell) + l2_norm * betas[1] + l1_norm * betas[0]
 
             else:
-                loss = criterion(pred, y)
+                loss = criterion(pred, y, mask=index_info_cell)
 
             # Backpropagation
 
@@ -544,21 +575,31 @@ def validation_loop(
 
     val_loss /= batch_ndx
 
-    # Plot the predicted vs. measurements for this validation epoch
-    fig, ax = plt.subplots(figsize=(5, 5))
-    ax.hist2d(
-        y_val_predicted.flatten(),
-        y_val_real.flatten(),
-        bins=(100,100),
-        norm=colors.LogNorm(),
-        cmap="viridis",
-    )
-    corrfunc(y_val_predicted.flatten(), y_val_real.flatten(), ax=ax)
-    ax.set_xlabel("Predicted Log2RPM")
-    ax.set_ylabel("Measured Log2RPM")
-    ax.set_title(f"Validation epoch {this_epoch} - {cell_type} cell type")
-    plt.savefig(os.path.join(output_directory, 'performance_stats', f"validation_scatter_{this_epoch}.svg"))
-    
+    for i_cell in range(n_cell_lines):
+
+        cell = cell_type.split("__")[i_cell] if cell_type else "cell_line"
+
+        y_val_real_cell = y_val_real[:, i_cell].flatten()
+        #Position of NaN
+        y_val_real_cell_nan = np.isnan(y_val_real_cell)
+        y_val_real_cell = y_val_real_cell[~y_val_real_cell_nan]
+        y_val_predicted_cell = y_val_predicted[:, i_cell].flatten()[~y_val_predicted_cell_nan]
+
+        # Plot the predicted vs. measurements for this validation epoch
+        fig, ax = plt.subplots(figsize=(5, 5))
+        ax.hist2d(
+            y_val_predicted_cell,
+            y_val_real_cell,
+            bins=(100,100),
+            norm=colors.LogNorm(),
+            cmap="viridis",
+        )
+        corrfunc(y_val_predicted_cell, y_val_real_cell, ax=ax)
+        ax.set_xlabel("Predicted Log2RPM")
+        ax.set_ylabel("Measured Log2RPM")
+        ax.set_title(f"Validation epoch {this_epoch} - {cell} cell type")
+        plt.savefig(os.path.join(output_directory, 'performance_stats', f"validation_scatter_{this_epoch}_{cell}.svg"))
+        
     return (y_val_predicted, y_val_real, val_loss)
 
 def corrfunc(x, y, ax=None, **kws):

@@ -346,17 +346,21 @@ def objective(
             os.path.join(output_directory, 'temp_models', f"model_epoch_{epoch}.pth"),
         )
 
-        true_sub = y_val_true[:, 0].flatten()
-        predicted_sub = y_val_predicted[:, 0].flatten()
+        for i_cell in range(len(cell_type.split("__"))):
 
-        MSE = (((true_sub - predicted_sub) ** 2) ** (1 / 2)).mean()
-        COEFF = r2_score(true_sub, predicted_sub)
-        PCC = round(pearsonr(true_sub, predicted_sub)[0], 3)
+            cell = cell_type.split("__")[i_cell] if cell_type else "cell_line"
 
-        log(f"  Summary validation")
-        log(f"\t R2 coefficient: {round(COEFF,4)}")
-        log(f"\t Mean sq. error: {round(MSE,4)}")
-        log(f"\t Pearson's correlation: {round(PCC,4)}")
+            true_sub = y_val_true[:, i_cell].flatten()
+            predicted_sub = y_val_predicted[:, i_cell].flatten()
+
+            MSE = (((true_sub - predicted_sub) ** 2) ** (1 / 2)).mean()
+            COEFF = r2_score(true_sub, predicted_sub)
+            PCC = round(pearsonr(true_sub, predicted_sub)[0], 3)
+
+            log(f"  Summary validation for {cell} cell line")
+            log(f"\t R2 coefficient: {round(COEFF,4)}")
+            log(f"\t Mean sq. error: {round(MSE,4)}")
+            log(f"\t Pearson's correlation: {round(PCC,4)}")
 
     # TRAINING is complete.
 

@@ -1,4 +1,3 @@
-from pip.cmdoptions import ignore_requires_python
 import numpy as np
 import sys
 import os

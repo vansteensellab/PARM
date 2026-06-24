@@ -214,7 +214,12 @@ def get_test_fold_predictions(
             sequences = f["X"]["sequence"]["OneHotEncoding"][:]
             if features_fragments_selection is not False: sequences = sequences[index]
             # Load measured values
-            measured = f["Y"][f"{normalization_method}_{cell}"][:]
+            try:
+                measured = f["Y"][f"{normalization_method}_{cell}"][:]
+            except:
+                print(f'This data {normalization_method}_{cell} is not available in dataset {test_fold_path}. So it will be skipped.')
+                continue
+                
             if features_fragments_selection is not False: measured = measured[index]
             # Load the feature names of each fragment
             try: 

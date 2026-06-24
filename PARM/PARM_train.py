@@ -491,7 +491,6 @@ def train_loop(
             }
         )
 
-        if batch_ndx > 200: break  # For testing purposes, remove this line in production
 
     training_loss /= batch_ndx
 
@@ -586,10 +585,7 @@ def validation_loop(
             # Backpropagation
 
             val_loss += loss.item()
-
-
-            if batch_ndx > 200: break  # For testing purposes, remove this line in production
-
+            
     val_loss /= batch_ndx
 
     for i_cell in range(n_cell_lines):

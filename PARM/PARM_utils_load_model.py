@@ -179,7 +179,7 @@ class ResNet_Attentionpool(nn.Module):
 
         self.conv_tower = nn.Sequential(*conv_layers)
             
-        self.linear1 = nn.Linear(filter_size, 1)
+        self.linear1 = nn.Linear(filter_size, output_nodes)  # Mean output
         if self.heteroscedastic:
             self.log_var = nn.Linear(filter_size, output_nodes)  # Log-variance output
         

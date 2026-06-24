@@ -4,7 +4,6 @@ import os
 import pandas as pd
 from matplotlib import pyplot as plt
 from matplotlib import colors
-import optuna
 from sklearn.metrics import r2_score
 from scipy.stats import pearsonr
 import math
@@ -151,7 +150,7 @@ def objective(
 
     def criterion(pred, y, mask=None):
         poisson = nn.PoissonNLLLoss(log_input=False)
-        if mask:
+        if mask is not None:
             pred = pred.flatten()[mask.flatten()]
             y = y.flatten()[mask.flatten()]
         return poisson(pred, y)
@@ -167,6 +166,7 @@ def objective(
             n_block=n_block,
             filter_size=filter_size,
             train=True,
+            cell_line=cell_type
         )
     else:
         log(f"Initializing model using weights in {initial_weights}")
@@ -175,6 +175,7 @@ def objective(
             L_max=L_max,
             n_block=n_block,
             filter_size=filter_size,
+            cell_line=cell_type,
         )
     dummybatch = torch.zeros(1, 4, L_max)
 
@@ -307,6 +308,7 @@ def objective(
             gradient_clipping=gradient_clipping,
             total_iterations=total_iterations_train,
             this_epoch=epoch,
+            cell_type=cell_type
         )
 
         sampler = shuffle_batch_sampler(
@@ -350,7 +352,11 @@ def objective(
             cell = cell_type.split("__")[i_cell] if cell_type else "cell_line"
 
             true_sub = y_val_true[:, i_cell].flatten()
+            #Remove nan
+            true_sub_nan = np.isnan(true_sub)
+            true_sub = true_sub[~true_sub_nan]
             predicted_sub = y_val_predicted[:, i_cell].flatten()
+            predicted_sub = predicted_sub[~true_sub_nan]
 
             MSE = (((true_sub - predicted_sub) ** 2) ** (1 / 2)).mean()
             COEFF = r2_score(true_sub, predicted_sub)
@@ -359,13 +365,14 @@ def objective(
             log(f"  Summary validation for {cell} cell line")
             log(f"\t R2 coefficient: {round(COEFF,4)}")
             log(f"\t Mean sq. error: {round(MSE,4)}")
-            log(f"\t Pearson's correlation: {round(PCC,4)}")
+            log(f"\t Pearson's correlation: {round(PCC,4)}\n")
 
     # TRAINING is complete.
 
     ##We've finished all epochs
     log(f"Finished training!")
-    output_basename = os.path.basename(output_directory)
+    output_basename = os.path.basename(os.path.abspath(output_directory))
+    if output_basename == '': output_basename = cell_type
     log(f"Model saved in: {os.path.join(output_directory, f'{output_basename}.parm')}")
     torch.save(model.state_dict(), os.path.join(output_directory, f"{output_basename}.parm"))
 
@@ -445,6 +452,7 @@ def train_loop(
         pred = model(X)
 
         if batch_ndx % 13 == 0:
+            
             y_train_predicted = np.append(
                 y_train_predicted, pred.cpu().detach().numpy(), axis=0
             )
@@ -472,7 +480,7 @@ def train_loop(
         training_loss += loss.item()
         if scheduler:
             scheduler.step()
-
+        
         loss_value = training_loss / (batch_ndx + 1)
 
         pbar.set_postfix(
@@ -483,6 +491,8 @@ def train_loop(
             }
         )
 
+        if batch_ndx > 200: break  # For testing purposes, remove this line in production
+
     training_loss /= batch_ndx
 
     for i_cell in range(n_cell_lines):
@@ -492,7 +502,7 @@ def train_loop(
         #Position of NaN
         y_train_true_cell_nan = np.isnan(y_train_true_cell)
         y_train_true_cell = y_train_true_cell[~y_train_true_cell_nan]
-        y_train_predicted_cell = y_train_predicted[:, i_cell].flatten()[~y_train_predicted_cell_nan]
+        y_train_predicted_cell = y_train_predicted[:, i_cell].flatten()[~y_train_true_cell_nan]
 
         mse = (((y_train_predicted_cell - y_train_true_cell) ** 2) ** (1 / 2)).mean()
         coeff = r2_score(y_train_true_cell, y_train_predicted_cell)
@@ -501,8 +511,9 @@ def train_loop(
         log(f"\t Avg. loss: {training_loss:>8f}")
         log(f"\t Mean sq. error: {mse:>3f}")
         log(f"\t R2 coefficient: {coeff:>3f}")
-        log(f"\t Pearson's correlation: {pcc:>3f}")
+        log(f"\t Pearson's correlation: {pcc:>3f}\n")
 
+    return (y_train_predicted, y_train_true, training_loss)
 
 
 def validation_loop(
@@ -576,6 +587,9 @@ def validation_loop(
 
             val_loss += loss.item()
 
+
+            if batch_ndx > 200: break  # For testing purposes, remove this line in production
+
     val_loss /= batch_ndx
 
     for i_cell in range(n_cell_lines):
@@ -586,7 +600,7 @@ def validation_loop(
         #Position of NaN
         y_val_real_cell_nan = np.isnan(y_val_real_cell)
         y_val_real_cell = y_val_real_cell[~y_val_real_cell_nan]
-        y_val_predicted_cell = y_val_predicted[:, i_cell].flatten()[~y_val_predicted_cell_nan]
+        y_val_predicted_cell = y_val_predicted[:, i_cell].flatten()[~y_val_real_cell_nan]
 
         # Plot the predicted vs. measurements for this validation epoch
         fig, ax = plt.subplots(figsize=(5, 5))

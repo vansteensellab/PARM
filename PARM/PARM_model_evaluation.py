@@ -701,6 +701,7 @@ def PARM_eval_model(model_dir,
                 type_loss = criterion,
                 filter_size=filter_size,
                 n_block = n_conv_blocks,
+                cell_line=cell_type
             ))
 
     print(

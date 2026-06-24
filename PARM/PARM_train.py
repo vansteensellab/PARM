@@ -308,7 +308,8 @@ def objective(
             gradient_clipping=gradient_clipping,
             total_iterations=total_iterations_train,
             this_epoch=epoch,
-            cell_type=cell_type
+            cell_type=cell_type,
+            output_directory=output_directory
         )
 
         sampler = shuffle_batch_sampler(
@@ -404,7 +405,8 @@ def train_loop(
     gradient_clipping=False,
     total_iterations=0,
     this_epoch=0,
-    cell_type=False
+    cell_type=False,
+    output_directory=None
 ):
     """
     Training loop.
@@ -502,7 +504,22 @@ def train_loop(
         y_train_true_cell_nan = np.isnan(y_train_true_cell)
         y_train_true_cell = y_train_true_cell[~y_train_true_cell_nan]
         y_train_predicted_cell = y_train_predicted[:, i_cell].flatten()[~y_train_true_cell_nan]
-
+        
+        # Plot the predicted vs. measurements for this validation epoch
+        fig, ax = plt.subplots(figsize=(5, 5))
+        ax.hist2d(
+            y_train_predicted_cell,
+            y_train_true_cell,
+            bins=(100,100),
+            norm=colors.LogNorm(),
+            cmap="viridis",
+        )
+        corrfunc(y_train_predicted_cell, y_train_true_cell, ax=ax)
+        ax.set_xlabel("Predicted Log2RPM")
+        ax.set_ylabel("Measured Log2RPM")
+        ax.set_title(f"Training epoch {this_epoch} - {cell} cell type")
+        plt.savefig(os.path.join(output_directory, 'performance_stats', f"training_scatter_{this_epoch}_{cell}.svg"))
+        
         mse = (((y_train_predicted_cell - y_train_true_cell) ** 2) ** (1 / 2)).mean()
         coeff = r2_score(y_train_true_cell, y_train_predicted_cell)
         pcc = pearsonr(y_train_true_cell.flatten(), y_train_predicted_cell.flatten())[0]

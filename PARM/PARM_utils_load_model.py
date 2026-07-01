@@ -123,14 +123,27 @@ class AttentionPool(nn.Module):
         attn = logits.softmax(dim = -1)
         return (x * attn).sum(dim = -1)
 
+class DenseLayersAfterSplit(nn.Module):
+    
+    def __init__(self, filter_size, output_nodes):
+        super().__init__()
 
+        self.net = nn.Sequential(
+            nn.Linear(filter_size, output_nodes),
+            nn.ReLU(),
+            nn.Linear(output_nodes, 1)
+        )
+
+    def forward(self, x):
+        return self.net(x)
 class ResNet_Attentionpool(nn.Module):
 
     def __init__(self, L_max, n_block, filter_size=125, weight_file=None, 
                 cell_line=False,
                 type_loss='poisson', validation=False, index_interested_output=False, maxglobalpool=True,
                 vocab=4, use_AttentionPool=True,
-                dense_layer_after_split=False):
+                dense_layer_after_split=False,
+                dense_layer_size=64):
         super(ResNet_Attentionpool, self).__init__()
 
         self.type_loss = type_loss
@@ -142,6 +155,7 @@ class ResNet_Attentionpool(nn.Module):
         self.L_max = L_max  # Max length of sequence
         self.vocab = vocab  # N nucleotides
         self.dense_layer_after_split = dense_layer_after_split
+        self.dense_layer_size = dense_layer_size
 
         kernel_size = 7
         stem_kernel_size = 7
@@ -187,9 +201,9 @@ class ResNet_Attentionpool(nn.Module):
             self.relu = nn.ReLU()
         else:
             self.linear1 = nn.Linear(filter_size, output_nodes)  # shared layer
-            self.cell_heads = nn.ModuleList([nn.Linear(output_nodes, 1) for _ in range(output_nodes)])  # a dense layer per cell line
+            self.cell_heads = nn.ModuleList([DenseLayersAfterSplit(filter_size, self.dense_layer_size) for _ in range(output_nodes)])  # a dense layer per cell line
             if self.heteroscedastic:
-                self.log_var_heads = nn.ModuleList([nn.Linear(output_nodes, 1) for _ in range(output_nodes)])
+                self.log_var_heads = nn.ModuleList([DenseLayersAfterSplit(filter_size, self.dense_layer_size) for _ in range(output_nodes)])
 
         #################
 

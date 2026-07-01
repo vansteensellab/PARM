@@ -129,7 +129,8 @@ class ResNet_Attentionpool(nn.Module):
     def __init__(self, L_max, n_block, filter_size=125, weight_file=None, 
                 cell_line=False,
                 type_loss='poisson', validation=False, index_interested_output=False, maxglobalpool=True,
-                vocab=4, use_AttentionPool=True):
+                vocab=4, use_AttentionPool=True,
+                dense_layer_after_split=False):
         super(ResNet_Attentionpool, self).__init__()
 
         self.type_loss = type_loss
@@ -140,6 +141,7 @@ class ResNet_Attentionpool(nn.Module):
         self.maxglobalpool = maxglobalpool
         self.L_max = L_max  # Max length of sequence
         self.vocab = vocab  # N nucleotides
+        self.dense_layer_after_split = dense_layer_after_split
 
         kernel_size = 7
         stem_kernel_size = 7
@@ -178,20 +180,27 @@ class ResNet_Attentionpool(nn.Module):
             prev_filter_size = filter_size
 
         self.conv_tower = nn.Sequential(*conv_layers)
-            
-        self.linear1 = nn.Linear(filter_size, output_nodes)  # Mean output
-        if self.heteroscedastic:
-            self.log_var = nn.Linear(filter_size, output_nodes)  # Log-variance output
-        
-        self.relu = nn.ReLU()
+        if self.dense_layer_after_split is False:
+            self.linear1 = nn.Linear(filter_size, output_nodes)  # Mean output
+            if self.heteroscedastic:
+                self.log_var = nn.Linear(filter_size, output_nodes)  # Log-variance output
+            self.relu = nn.ReLU()
+        else:
+            self.linear1 = nn.Linear(filter_size, output_nodes)  # shared layer
+            self.cell_heads = nn.ModuleList([nn.Linear(output_nodes, 1) for _ in range(output_nodes)])  # a dense layer per cell line
+            if self.heteroscedastic:
+                self.log_var_heads = nn.ModuleList([nn.Linear(output_nodes, 1) for _ in range(output_nodes)])
 
         #################
 
     def forward(self, x):
-
-        out = self.stem(x)
-
-        out = self.conv_tower(out)
+        if self.dense_layer_after_split is False:
+            out = self.stem(x)
+            out = self.conv_tower(out)
+        else:
+            out = self.stem(x)
+            out = self.conv_tower(out)
+            out = torch.cat([head(out) for head in self.cell_heads], dim=-1)
 
         if self.maxglobalpool:
             #max in length

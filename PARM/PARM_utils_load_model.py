@@ -125,14 +125,21 @@ class AttentionPool(nn.Module):
 
 class DenseLayersAfterSplit(nn.Module):
     
-    def __init__(self, filter_size, output_nodes):
+    def __init__(self, filter_size, output_nodes, heteroscedastic=False):
         super().__init__()
 
-        self.net = nn.Sequential(
-            nn.Linear(filter_size, output_nodes),
-            nn.ReLU(),
-            nn.Linear(output_nodes, 1)
-        )
+        if heteroscedastic is False:
+            self.net = nn.Sequential(
+                nn.Linear(filter_size, output_nodes),
+                nn.ReLU(),
+                nn.Linear(output_nodes, 1)
+            )
+        else:
+            self.net = nn.Sequential(
+                nn.Linear(filter_size, output_nodes),
+                nn.ReLU(),
+                nn.Linear(output_nodes, 2)
+            )
 
     def forward(self, x):
         return self.net(x)
@@ -200,21 +207,12 @@ class ResNet_Attentionpool(nn.Module):
                 self.log_var = nn.Linear(filter_size, output_nodes)  # Log-variance output
             self.relu = nn.ReLU()
         else:
-            self.linear1 = nn.Linear(filter_size, output_nodes)  # shared layer
-            self.cell_heads = nn.ModuleList([DenseLayersAfterSplit(filter_size, self.dense_layer_size) for _ in range(output_nodes)])  # a dense layer per cell line
-            if self.heteroscedastic:
-                self.log_var_heads = nn.ModuleList([DenseLayersAfterSplit(filter_size, self.dense_layer_size) for _ in range(output_nodes)])
-
+            self.cell_heads = nn.ModuleList([DenseLayersAfterSplit(filter_size, self.dense_layer_size, self.heteroscedastic) for _ in range(output_nodes)])  # a dense layer per cell line
         #################
 
     def forward(self, x):
-        if self.dense_layer_after_split is False:
-            out = self.stem(x)
-            out = self.conv_tower(out)
-        else:
-            out = self.stem(x)
-            out = self.conv_tower(out)
-            out = torch.cat([head(out) for head in self.cell_heads], dim=-1)
+        out = self.stem(x)
+        out = self.conv_tower(out)
 
         if self.maxglobalpool:
             #max in length
@@ -222,15 +220,17 @@ class ResNet_Attentionpool(nn.Module):
 
         out = out.view(out.size(0), -1)
 
-        if self.heteroscedastic:
-            mu = self.linear1(out)
-            log_var = self.log_var(out)  # Log variance
-            #return(mu)
-            if self.validation: return mu
-            return mu, log_var
-        
+        if self.dense_layer_after_split is False:
+            if self.heteroscedastic:
+                mu = self.linear1(out)
+                log_var = self.log_var(out)  # Log variance
+                #return(mu)
+                if self.validation: return mu
+                return mu, log_var
+            else:
+                out = self.linear1(out)
         else:
-            out = self.linear1(out)
+            out = torch.cat([head(out) for head in self.cell_heads], dim=-1)
         
 
         if self.type_loss == 'poisson': out = self.relu(out)

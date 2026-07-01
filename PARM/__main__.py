@@ -110,6 +110,7 @@ def train(args):
     print_arguments("Number of blocks", args.n_blocks)
     print_arguments("Filter size", args.filter_size)
     print_arguments("Initial weights", args.initial_weights)
+    print_arguments("Dense layer after split", args.dense_layer_after_split)
 
     print("=" * 80)
     PARM_train(args)
@@ -161,6 +162,9 @@ def mutagenesis(args):
     print_arguments("Model", args.model)
     print_arguments("Input", args.input)
     print_arguments("Output", args.output)
+    print_arguments("Cell type", args.cell_type)
+    print_arguments("Filter size", args.filter_size)
+    print_arguments("Type loss function", args.type_loss)
     # check if args.motif_database is the default
     if args.motif_database == default_motif_db:
         print_arguments("Motif database", "HOCOMOCOv11 (default)")
@@ -174,6 +178,9 @@ def mutagenesis(args):
         output_directory=args.output,
         motif_database=args.motif_database,
         filter_size=args.filter_size,
+        type_loss=args.type_loss,
+        n_conv_blocks=args.n_blocks,
+        cell_type=args.cell_type
     )
 
 
@@ -258,16 +265,17 @@ def evaluation_model(args):
         file_SNP_SuRE=args.file_SNP_SuRE
     )
 
-
+def str2bool(v):
+    if v == "False":
+        return False
+    elif v == "True":
+        return True
+    else:
+        return v
+        
 # Train task ===================================================================
 def train_subparser(subparsers):
     "Parses inputs from commandline and returns them as a Namespace object."
-
-    def str2bool(v):
-        if v == "False":
-            return False
-        else:
-            return v
 
     group = subparsers.add_parser(
         "train",
@@ -410,6 +418,13 @@ def train_subparser(subparsers):
         default=False,
         type=str,
         help="Filtering the h5 file based on where the fragments overlap. Only choose this option if the files have been set up for filtering in either TSS or EnhA."
+    )
+    
+    model_args.add_argument(
+        "--dense_layer_after_split",
+        help="Number of dense layers after split. (default: False)",
+        default=False,
+        type=str2bool,
     )
 
     other_args = group.add_argument_group("Other")
@@ -785,6 +800,13 @@ def evaluation_model_subparser(subparsers):
         "--cell_type",
         required=True,
         help="General argument. Cell line to work with (K562, HEPG2, hNPC, HCT166, MCF7, mESC or any combination of these separated by two underscores (__). Used in the input_h5py_file to select the right files to compute the predictions of the MPRA fragments. \n",
+    )
+
+    optional_arguments.add_argument(
+        "--dense_layer_after_split",
+        type=str2bool,
+        default=False,
+        help="General argument. \n Whether to use dense layers after split (default: False) \n",
     )
 
     # Arguments for the input files

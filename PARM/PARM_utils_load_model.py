@@ -123,13 +123,34 @@ class AttentionPool(nn.Module):
         attn = logits.softmax(dim = -1)
         return (x * attn).sum(dim = -1)
 
+class DenseLayersAfterSplit(nn.Module):
+    
+    def __init__(self, filter_size, output_nodes, heteroscedastic=False):
+        super().__init__()
 
+        if heteroscedastic is False:
+            self.net = nn.Sequential(
+                nn.Linear(filter_size, output_nodes),
+                nn.ReLU(),
+                nn.Linear(output_nodes, 1)
+            )
+        else:
+            self.net = nn.Sequential(
+                nn.Linear(filter_size, output_nodes),
+                nn.ReLU(),
+                nn.Linear(output_nodes, 2)
+            )
+
+    def forward(self, x):
+        return self.net(x)
 class ResNet_Attentionpool(nn.Module):
 
     def __init__(self, L_max, n_block, filter_size=125, weight_file=None, 
                 cell_line=False,
                 type_loss='poisson', validation=False, index_interested_output=False, maxglobalpool=True,
-                vocab=4, use_AttentionPool=True):
+                vocab=4, use_AttentionPool=True,
+                dense_layer_after_split=False,
+                dense_layer_size=64):
         super(ResNet_Attentionpool, self).__init__()
 
         self.type_loss = type_loss
@@ -140,6 +161,8 @@ class ResNet_Attentionpool(nn.Module):
         self.maxglobalpool = maxglobalpool
         self.L_max = L_max  # Max length of sequence
         self.vocab = vocab  # N nucleotides
+        self.dense_layer_after_split = dense_layer_after_split
+        self.dense_layer_size = dense_layer_size
 
         kernel_size = 7
         stem_kernel_size = 7
@@ -178,19 +201,17 @@ class ResNet_Attentionpool(nn.Module):
             prev_filter_size = filter_size
 
         self.conv_tower = nn.Sequential(*conv_layers)
-            
-        self.linear1 = nn.Linear(filter_size, output_nodes)  # Mean output
-        if self.heteroscedastic:
-            self.log_var = nn.Linear(filter_size, output_nodes)  # Log-variance output
-        
-        self.relu = nn.ReLU()
-
+        if self.dense_layer_after_split is False:
+            self.linear1 = nn.Linear(filter_size, output_nodes)  # Mean output
+            if self.heteroscedastic:
+                self.log_var = nn.Linear(filter_size, output_nodes)  # Log-variance output
+            self.relu = nn.ReLU()
+        else:
+            self.cell_heads = nn.ModuleList([DenseLayersAfterSplit(filter_size, self.dense_layer_size, self.heteroscedastic) for _ in range(output_nodes)])  # a dense layer per cell line
         #################
 
     def forward(self, x):
-
         out = self.stem(x)
-
         out = self.conv_tower(out)
 
         if self.maxglobalpool:
@@ -199,15 +220,17 @@ class ResNet_Attentionpool(nn.Module):
 
         out = out.view(out.size(0), -1)
 
-        if self.heteroscedastic:
-            mu = self.linear1(out)
-            log_var = self.log_var(out)  # Log variance
-            #return(mu)
-            if self.validation: return mu
-            return mu, log_var
-        
+        if self.dense_layer_after_split is False:
+            if self.heteroscedastic:
+                mu = self.linear1(out)
+                log_var = self.log_var(out)  # Log variance
+                #return(mu)
+                if self.validation: return mu
+                return mu, log_var
+            else:
+                out = self.linear1(out)
         else:
-            out = self.linear1(out)
+            out = torch.cat([head(out) for head in self.cell_heads], dim=-1)
         
 
         if self.type_loss == 'poisson': out = self.relu(out)

@@ -664,7 +664,8 @@ def PARM_eval_model(model_dir,
                     file_SNP_SuRE,
                     normalization_method="Log2RPM",
                     filter_size=125,
-                    n_conv_blocks=5
+                    n_conv_blocks=5,
+                    dense_layer_after_spliit=False
                     ):
     """
     """
@@ -701,7 +702,8 @@ def PARM_eval_model(model_dir,
                 type_loss = criterion,
                 filter_size=filter_size,
                 n_block = n_conv_blocks,
-                cell_line=cell_type
+                cell_line=cell_type,
+                dense_layer_after_split=dense_layer_after_spliit
             ))
 
     print(

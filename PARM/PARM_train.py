@@ -395,6 +395,41 @@ def objective(
     return val_loss
 
 
+def masked_reg_terms(model, mask, dense_layer_after_split):
+    """
+    mask: boolean array/tensor of shape (batch, n_heads) — which head has a
+          valid (non-NaN) label for each example in this batch.
+    Shared backbone params are always regularized. Head-specific params are
+    only regularized if their head has at least one valid label this batch.
+    """
+    head_active = mask.any(axis=0)  # shape (n_heads,)
+    l1_norm = 0.0
+    l2_norm = 0.0
+
+    for name, param in model.named_parameters():
+        if dense_layer_after_split and name.startswith("cell_heads."):
+            head_idx = int(name.split(".")[1])
+            if not head_active[head_idx]:
+                continue  # skip: no data for this head this batch
+            l1_norm = l1_norm + torch.norm(param, p=1)
+            l2_norm = l2_norm + torch.norm(param, p=2)
+
+        elif not dense_layer_after_split and (name.startswith("linear1.") or name.startswith("log_var.")):
+            # linear1.weight / log_var.weight: shape (n_heads, filter_size); bias: shape (n_heads,)
+            for head_idx, active in enumerate(head_active):
+                if not active:
+                    continue
+                row = param[head_idx]
+                l1_norm = l1_norm + torch.norm(row, p=1)
+                l2_norm = l2_norm + torch.norm(row, p=2)
+
+        else:
+            # shared backbone — always regularize
+            l1_norm = l1_norm + torch.norm(param, p=1)
+            l2_norm = l2_norm + torch.norm(param, p=2)
+
+    return l1_norm, l2_norm
+    
 def train_loop(
     train_dataloader,
     model,
@@ -462,8 +497,13 @@ def train_loop(
 
         if betas[0] != 0 or betas[1] != 0:
 
-            l2_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
-            l1_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
+            if '__' in cell_type:
+                l1_norm, l2_norm = masked_reg_terms(model, index_info_cell, model.dense_layer_after_split)
+
+            else:
+
+                l2_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
+                l1_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
 
             loss = criterion(pred, y, mask=index_info_cell) + l2_norm * betas[1] + l1_norm * betas[0]
 
@@ -590,14 +630,19 @@ def validation_loop(
 
             if betas[0] != 0 or betas[1] != 0:
 
+            if '__' in cell_type:
+                l1_norm, l2_norm = masked_reg_terms(model, index_info_cell, model.dense_layer_after_split)
+
+            else:
+
                 l2_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
                 l1_norm = sum(torch.norm(weight, p=2) for name, weight in model.named_parameters())
 
+            loss = criterion(pred, y, mask=index_info_cell) + l2_norm * betas[1] + l1_norm * betas[0]
 
-                loss = criterion(pred, y, mask=index_info_cell) + l2_norm * betas[1] + l1_norm * betas[0]
+        else:
+            loss = criterion(pred, y, mask=index_info_cell)
 
-            else:
-                loss = criterion(pred, y, mask=index_info_cell)
 
             # Backpropagation
 

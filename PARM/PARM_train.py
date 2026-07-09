@@ -32,6 +32,7 @@ def PARM_train(args):
     weight_decay = args.weight_decay
     filtering_on_FEAT = args.filtering_on_FEAT
     validation_path = args.validation
+    dense_layer_after_split = args.dense_layer_after_split
     if type(validation_path) != list:
         validation_path = list(validation_path)
 
@@ -89,7 +90,8 @@ def PARM_train(args):
         "cell_type": args.cell_type,
         "n_workers": args.n_workers,
         "initial_weights": initial_weights,
-        "filtering_on_FEAT" : filtering_on_FEAT
+        "filtering_on_FEAT" : filtering_on_FEAT,
+        "dense_layer_after_split": dense_layer_after_split
     }
 
     objective(**param_model)
@@ -112,7 +114,8 @@ def objective(
     adaptor=(False, False),
     n_workers=0,
     initial_weights=None,
-    filtering_on_FEAT=False
+    filtering_on_FEAT=False,
+    dense_layer_after_split=False
 ):
     """
     Objetive function to train and validate models.
@@ -133,6 +136,8 @@ def objective(
         cell_type: (str) Cell type to train the model.
         n_workers: (int) Number of workers to use in data loading.
         initial_weights: (str) Path to initial weights file. If None, random initialization is used.
+        filtering_on_FEAT: (bool) Whether to apply filtering on FEAT.
+        dense_layer_after_split: (bool) Whether to use dense layers after split.
 
     Returns:
 
@@ -166,7 +171,8 @@ def objective(
             n_block=n_block,
             filter_size=filter_size,
             train=True,
-            cell_line=cell_type
+            cell_line=cell_type,
+            dense_layer_after_split=dense_layer_after_split
         )
     else:
         log(f"Initializing model using weights in {initial_weights}")
@@ -176,6 +182,7 @@ def objective(
             n_block=n_block,
             filter_size=filter_size,
             cell_line=cell_type,
+            dense_layer_after_split=dense_layer_after_split
         )
     dummybatch = torch.zeros(1, 4, L_max)
 
@@ -559,7 +566,7 @@ def train_loop(
         ax.set_ylabel("Measured Log2RPM")
         ax.set_title(f"Training epoch {this_epoch} - {cell} cell type")
         plt.savefig(os.path.join(output_directory, 'performance_stats', f"training_scatter_{this_epoch}_{cell}.svg"))
-        
+        plt.close(fig)
         mse = (((y_train_predicted_cell - y_train_true_cell) ** 2) ** (1 / 2)).mean()
         coeff = r2_score(y_train_true_cell, y_train_predicted_cell)
         pcc = pearsonr(y_train_true_cell.flatten(), y_train_predicted_cell.flatten())[0]
@@ -674,7 +681,7 @@ def validation_loop(
         ax.set_ylabel("Measured Log2RPM")
         ax.set_title(f"Validation epoch {this_epoch} - {cell} cell type")
         plt.savefig(os.path.join(output_directory, 'performance_stats', f"validation_scatter_{this_epoch}_{cell}.svg"))
-        
+        plt.close(fig)
     return (y_val_predicted, y_val_real, val_loss)
 
 def corrfunc(x, y, ax=None, **kws):

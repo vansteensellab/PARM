@@ -209,6 +209,10 @@ def plot(args):
     print_arguments("Min. relative attribution", args.min_relative_attribution)
     print_arguments("Attribution range", r)
     print_arguments("Plot format", args.plot_format)
+    if args.motif_database == default_motif_db:
+        print_arguments("Motif database", "HOCOMOCOv11 (default)")
+    else:
+        print_arguments("Motif database", args.motif_database)
     # Same but now filling the output with spaces so it gets 80 characters
     print("=" * 80)
     PARM_plot_mutagenesis(
@@ -218,6 +222,8 @@ def plot(args):
         attribution_threshold=args.attribution_threshold,
         plot_format=args.plot_format,
         attribution_range=attribution_range,
+        motif_database=args.motif_database,
+        min_relative_attribution=args.min_relative_attribution
     )
 
 
@@ -685,6 +691,11 @@ def plot_subparser(subparsers):
         "as a percentage of the maximum letter attribution within any motif. "
         "i.e. only motifs with mean attribution above this percentage of the highest attributed letter "
         "will be shown. (Default: 0.15).",
+    )
+    optional_arguments.add_argument(
+        "--motif_database",
+        default="https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
+        help="Path or url to the motif database (JASPAR format). Default is HOCOMOCOv11: https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
     )
     optional_arguments.add_argument(
         "--attribution_range",

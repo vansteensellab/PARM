@@ -1486,6 +1486,8 @@ def PARM_plot_mutagenesis(
     plot_format: str,
     output_directory = None,
     attribution_range: list = None,
+    min_relative_attribution: list = None,
+    motif_database: str = "https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
 ):
     """
     Generate the plots of the mutagenesis data (produced by PARM_mutagenesis.py).
@@ -1571,6 +1573,8 @@ def PARM_plot_mutagenesis(
             hits=hits_data,
             output_file=output_file,
             attribution_range=attribution_range,
+            min_relative_attribution=min_relative_attribution,
+            motif_database=motif_database
         )
         pbar.update(1)
 
@@ -2063,8 +2067,7 @@ def plot_mutagenesis(
     mutagenesis_df,
     seq,
     TSS_position=0,
-    PFM_hocomoco_dict=False,
-    ICT_hocomoco_dict=False,
+    motif_database="https://hocomoco11.autosome.org/final_bundle/hocomoco11/core/HUMAN/mono/HOCOMOCOv11_core_HUMAN_mono_jaspar_format.txt",
     output_file=False,
     promoter_name="",
     return_fig=False,
@@ -2103,9 +2106,7 @@ def plot_mutagenesis(
     import matplotlib.pyplot as plt
     import seaborn as sns
     
-    ##IF not provided, just load  them
-    if PFM_hocomoco_dict is False or ICT_hocomoco_dict is False:
-        PFM_hocomoco_dict, _, ICT_hocomoco_dict = dict_jaspar(reverse=True)
+    PFM_hocomoco_dict, _, ICT_hocomoco_dict = dict_jaspar(motif_database, reverse=True)
     pos = pd.Series(list(range(len(seq))))
     strand = "+"
     if strand == "-":

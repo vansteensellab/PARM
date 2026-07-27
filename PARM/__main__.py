@@ -552,6 +552,13 @@ def predict_subparser(subparsers):
         help="Show program's version number and exit",
     )
 
+    other_args.add_argument(
+        "--check_cuda",
+        action=check_cuda,
+        nargs=0,
+        help="Check if CUDA is available and exit",
+    )
+
     group.set_defaults(func=predict)
 
 

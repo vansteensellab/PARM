@@ -179,7 +179,7 @@ def mutagenesis(args):
         motif_database=args.motif_database,
         filter_size=args.filter_size,
         type_loss=args.type_loss,
-        n_conv_blocks=args.n_blocks,
+        n_blocks=args.n_blocks,
     )
 
 

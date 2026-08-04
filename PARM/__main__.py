@@ -162,7 +162,6 @@ def mutagenesis(args):
     print_arguments("Model", args.model)
     print_arguments("Input", args.input)
     print_arguments("Output", args.output)
-    print_arguments("Cell type", args.cell_type)
     print_arguments("Filter size", args.filter_size)
     print_arguments("Type loss function", args.type_loss)
     # check if args.motif_database is the default
@@ -180,7 +179,6 @@ def mutagenesis(args):
         filter_size=args.filter_size,
         type_loss=args.type_loss,
         n_conv_blocks=args.n_blocks,
-        cell_type=args.cell_type
     )
 
 

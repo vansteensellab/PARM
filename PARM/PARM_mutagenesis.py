@@ -92,7 +92,7 @@ def PARM_mutagenesis(
                       filter_size=filter_size, 
                       train=False, 
                       type_loss=type_loss, 
-                      n_blocks=n_blocks,
+                      n_block=n_blocks,
             )
         )
 

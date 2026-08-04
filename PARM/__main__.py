@@ -164,6 +164,7 @@ def mutagenesis(args):
     print_arguments("Output", args.output)
     print_arguments("Filter size", args.filter_size)
     print_arguments("Type loss function", args.type_loss)
+    print_arguments("Number of convolution blocks", args.n_blocks)
     # check if args.motif_database is the default
     if args.motif_database == default_motif_db:
         print_arguments("Motif database", "HOCOMOCOv11 (default)")
@@ -622,6 +623,19 @@ def mutagenesis_subparser(subparsers):
         type=int,
         default=125,
         help="The model size that torch expects (Default: 125) "
+    )
+    advanced_args.add_argument(
+        "--n_blocks",
+        default=5,
+        type=int,
+        help="Number of convolution blocks. (default: 5)",
+    )
+    advanced_args.add_argument(
+        "--type_loss",
+        default = 'poisson',
+        choices=['MSE', 'poisson', 'heteroscedastic'],
+        type = str,
+        help=' Type of loss function to use for the model. Default is "poisson". Other options are "MSE" and "heteroscedastic".'
     )
     #
     other_args = group.add_argument_group("Other")

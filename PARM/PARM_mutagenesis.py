@@ -23,6 +23,8 @@ def PARM_mutagenesis(
     motif_database: str,
     output_directory: str,
     filter_size: int = 125,
+    type_loss: str = "poisson",
+    n_blocks: int = 5,
 ):
     """
     Function to execute the in-silico mutageesis of a sequence using the PARM models.
@@ -34,14 +36,18 @@ def PARM_mutagenesis(
     ----------
     input : str
         Path to the input fasta file.
-    model_weights : list
-        List of paths to the PARM models. This should be a list even if there's only one model.
+    model_directory : str
+        Path to the directory containing the PARM models.
     motif_database : str
         Path to the motif database. Usually this is the HOCOMOCO database.
     output_directory : str
         Path to the output directory where the results will be saved.
     filter_size : int
         Size of the filter to use for the PARM model. Default is 125.
+    type_loss : str
+        Type of loss function used for the PARM model. Default is "poisson".
+    n_blocks : int
+        Number of convolution blocks in the PARM model. Default is 5.
 
     Returns
     -------
@@ -82,7 +88,12 @@ def PARM_mutagenesis(
                 f"Model prefixes do not match: {model_name} and {os.path.basename(model_weight).split('_fold')[0]}. Please make sure that folds of the same model have the same prefix"
             )
         complete_models.append(
-            load_PARM(model_weight, filter_size=filter_size, train=False)
+            load_PARM(model_weight, 
+                      filter_size=filter_size, 
+                      train=False, 
+                      type_loss=type_loss, 
+                      n_blocks=n_blocks,
+            )
         )
 
     # ====================================================================================

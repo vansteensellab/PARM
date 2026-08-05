@@ -1588,7 +1588,8 @@ def PARM_plot_mutagenesis(
             hits=hits_data,
             output_file=output_file,
             attribution_range=attribution_range,
-            min_relative_attribution=min_relative_attribution
+            min_relative_attribution=min_relative_attribution,
+            motif_database=motif_database,
         )
         pbar.update(1)
 
